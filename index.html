@@ -5,259 +5,1512 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ALESFUN CRM</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0d0d0d"/>
     <link rel="apple-touch-icon" href="images/icon-192x192.png">
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome para iconos -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- jsPDF para generar PDFs -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
+    <meta name="theme-color" content="#001a33"/>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap" rel="stylesheet">
     <style>
-        /* Estilo base con tema Matrix/Hacker */
         body {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #0d0d0d;
-            color: #00ff41;
+            background-color: #0d1a26; /* Darker blue-grey */
+            color: #00e6e6; /* Cyan */
+            font-family: 'Major Mono Display', monospace; /* Hacker/Matrix font */
         }
         .matrix-bg {
-            background-color: black;
-            overflow: hidden;
             position: fixed;
-            height: 100%;
-            width: 100%;
-            z-index: 9999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .matrix-canvas {
-            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+            overflow: hidden;
+            z-index: -1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #0d1a26;
+        }
+        .matrix-column {
+            display: flex;
+            flex-direction: column;
+            white-space: pre;
+            opacity: 0.1; /* More subtle */
+            animation: matrix-scroll linear infinite;
+        }
+        .matrix-char {
+            color: #00cc66; /* Green for numbers */
+            font-size: 1.2em;
+            text-shadow: 0 0 5px #00cc66;
+        }
+        @keyframes matrix-scroll {
+            from { transform: translateY(-100%); }
+            to { transform: translateY(100%); }
         }
         .tab-button {
-            @apply px-4 py-2 border-b-2 font-medium text-lg;
-            border-color: transparent;
-            color: #66c2ff; /* Celeste */
-            transition: all 0.3s ease;
+            @apply px-4 py-2 text-lg border-b-2 border-transparent;
         }
         .tab-button.active {
-            color: #00ff41; /* Verde Matrix */
-            border-color: #00aaff; /* Azul */
+            @apply border-b-2 border-current;
         }
-        .input-field {
-            @apply w-full bg-gray-900 border border-blue-700 text-cyan-300 text-lg rounded-md p-2 focus:ring-2 focus:ring-cyan-400 focus:outline-none transition;
+        .input-dark {
+            @apply bg-gray-800 text-cyan-400 border border-cyan-700 p-2 rounded focus:ring-2 focus:ring-cyan-500 focus:border-transparent;
         }
-        .btn-primary {
-            @apply bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-blue-900/50 transition duration-300 w-full;
+        .btn-dark {
+            @apply bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded transition duration-300;
         }
-        .btn-secondary {
-            @apply bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg shadow-md shadow-gray-900/50 transition duration-300 w-full;
+        .btn-green {
+            @apply bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded transition duration-300;
         }
-        .modal-backdrop {
-            @apply fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50;
+        .btn-red {
+            @apply bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded transition duration-300;
+        }
+        .table-dark th, .table-dark td {
+            @apply border border-cyan-800 px-4 py-2;
+        }
+        .table-dark th {
+            @apply bg-gray-900;
+        }
+        .table-dark tr:nth-child(even) {
+            @apply bg-gray-800;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95); /* Semi-transparent dark overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1000;
+            color: #00e6e6; /* Cyan */
+            font-size: 2em;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
         }
         .modal-content {
-            @apply bg-gray-900 border-2 border-blue-600 p-6 rounded-xl shadow-2xl shadow-blue-800/50;
+            background-color: #0d1a26;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px #00e6e6;
+            color: #00e6e6;
+            width: 90%;
+            max-width: 500px;
         }
-        /* Ocultar scrollbar */
-        ::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="overscroll-none">
+<body class="p-4">
+    <div id="matrix-loading-bg" class="matrix-bg"></div>
 
-    <!-- PANTALLA DE CARGA MATRIX -->
-    <div id="loading-screen" class="matrix-bg">
-        <canvas id="matrix-canvas" class="matrix-canvas"></canvas>
-        <h1 class="text-4xl z-10 text-cyan-300 animate-pulse">CARGANDO ALESFUN CRM...</h1>
-    </div>
-
-    <!-- CONTENIDO PRINCIPAL -->
-    <div id="app-container" class="hidden h-screen flex flex-col max-w-4xl mx-auto p-2 md:p-4">
-        <!-- CABECERA -->
-        <header class="flex justify-between items-center mb-4">
-            <h1 class="text-3xl font-bold text-cyan-400">ALESFUN <span class="text-blue-500">CRM</span></h1>
-            <div class="flex items-center space-x-2">
-                <span id="sync-status" class="text-sm text-gray-400"></span>
-                 <button id="manual-sync" class="text-blue-400 hover:text-cyan-300 transition"><i class="fas fa-sync fa-spin"></i> Sincronizar</button>
-            </div>
+    <div id="app-content" class="hidden">
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-blue-400">ALESFUN CRM</h1>
+            <button id="syncButton" class="text-cyan-400 hover:text-cyan-200 flex items-center btn-dark">
+                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m0 0v5h-.582m15.356-5h.582m-15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m0 0v5h-.582"></path></svg>
+                Sincronizar
+            </button>
         </header>
 
-        <!-- PESTAÑAS DE NAVEGACIÓN -->
-        <nav class="flex border-b border-blue-800 mb-4">
-            <button class="tab-button active" data-tab="ventas">Ventas</button>
-            <button class="tab-button" data-tab="recibos">Recibos</button>
-            <button class="tab-button" data-tab="mas">Más Opciones</button>
+        <nav class="mb-6 border-b border-cyan-700">
+            <button id="tabVentas" class="tab-button active text-green-400">Ventas</button>
+            <button id="tabRecibos" class="tab-button text-blue-400">Recibos</button>
+            <button id="tabMasOpciones" class="tab-button text-purple-400">Más Opciones</button>
         </nav>
 
-        <!-- CONTENIDO DE PESTAÑAS -->
-        <main class="flex-grow overflow-y-auto">
-            <!-- PESTAÑA VENTAS -->
-            <div id="tab-ventas" class="tab-content space-y-4">
-                <!-- VENTA FORM -->
+        <div id="contentVentas" class="tab-content">
+            <h2 class="text-2xl text-green-300 mb-4">Gestión de Ventas / Pagos</h2>
+            <div class="mb-4">
+                <label for="ventaClienteSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Cliente (Nombre/ID):</label>
+                <input type="text" id="ventaClienteSearch" class="input-dark w-full" placeholder="Escribe nombre o ID del cliente">
+                <div id="ventaClienteSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
             </div>
-
-            <!-- PESTAÑA RECIBOS -->
-            <div id="tab-recibos" class="tab-content hidden space-y-4">
-                <!-- RECIBOS FORM -->
-            </div>
-
-            <!-- PESTAÑA MÁS OPCIONES -->
-            <div id="tab-mas" class="tab-content hidden space-y-4">
-                 <!-- SUB-TABS -->
-                 <div class="flex border-b border-blue-900 text-sm">
-                    <button class="sub-tab-button active" data-subtab="inventario">Inventario</button>
-                    <button class="sub-tab-button" data-subtab="clientes">Clientes</button>
-                    <button class="sub-tab-button" data-subtab="cierres">Cierres</button>
+            <div class="mb-4 p-4 border border-cyan-800 rounded-lg">
+                <h3 class="text-lg text-cyan-300 mb-2">Datos del Cliente:</h3>
+                <p>ID: <span id="ventaClienteId" class="text-white"></span></p>
+                <p>Nombre: <span id="ventaClienteNombre" class="text-white"></span></p>
+                <p>Saldo Actual: <span id="ventaClienteSaldo" class="text-white"></span></p>
+                <div class="mt-4 flex items-center">
+                    <input type="checkbox" id="soloPagoACuenta" class="form-checkbox h-5 w-5 text-blue-600 bg-gray-700 border-gray-600 rounded">
+                    <label for="soloPagoACuenta" class="ml-2 text-cyan-400">Solo Pago a Cuenta</label>
                 </div>
-                <!-- MAS OPCIONES CONTENT -->
             </div>
-        </main>
-    </div>
-    
-    <!-- MODAL PARA NOTIFICACIONES -->
-    <div id="notification-modal" class="modal-backdrop hidden">
-        <div class="modal-content text-center w-11/12 md:w-1/3">
-            <p id="notification-message" class="text-lg text-cyan-300 mb-4"></p>
-            <button id="notification-ok" class="btn-primary w-1/2">OK</button>
+
+            <div id="productosVentaSection">
+                <h3 class="text-lg text-green-300 mb-2">Productos a la Venta:</h3>
+                <div class="mb-4">
+                    <label for="productoSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Producto (Nombre/Código):</label>
+                    <input type="text" id="productoSearch" class="input-dark w-full" placeholder="Escribe nombre o código del producto">
+                    <div id="productoSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
+                </div>
+                <div id="productosSeleccionados" class="mb-4">
+                    </div>
+            </div>
+
+            <div class="mb-6 p-4 border border-cyan-800 rounded-lg">
+                <h3 class="text-lg text-yellow-300 mb-2">Resumen de Pago:</h3>
+                <p>Total a Pagar: <span id="ventaTotalPagar" class="text-white font-bold">0.00</span></p>
+                <p>Saldo Pendiente (Venta): <span id="ventaSaldoPendienteVenta" class="text-white">0.00</span></p>
+                <div class="mt-2">
+                    <label for="ventaMontoPago" class="block text-cyan-400 text-sm font-bold mb-2">Monto de Pago:</label>
+                    <input type="number" id="ventaMontoPago" class="input-dark w-full" placeholder="0.00" step="0.01">
+                </div>
+                <p class="mt-2">Cambio: <span id="ventaCambio" class="text-white font-bold">0.00</span></p>
+                <p class="mt-2">Nuevo Saldo del Cliente: <span id="ventaNuevoSaldoCliente" class="text-white font-bold">0.00</span></p>
+            </div>
+
+            <div class="flex justify-between">
+                <button id="btnRegistrarVenta" class="btn-dark">Registrar Venta/Pago</button>
+                <button id="btnLimpiarVenta" class="btn-red">Limpiar Formulario</button>
+            </div>
         </div>
-    </div>
 
-    <script>
-        // PEGA AQUÍ LA URL DE TU API DE APPS SCRIPT
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0Eo-hHnvVFESGW8LRVBrFGInzEUa6B8H2QDH4-tvac1OhUNBHxwy33WR8wb9vPIK8/exec';
+        <div id="contentRecibos" class="tab-content hidden">
+            <h2 class="text-2xl text-blue-300 mb-4">Generar Recibos</h2>
+            <div class="mb-4">
+                <label for="reciboClienteSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Cliente (Nombre/ID):</label>
+                <input type="text" id="reciboClienteSearch" class="input-dark w-full" placeholder="Escribe nombre o ID del cliente">
+                <div id="reciboClienteSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
+            </div>
+            <div class="mb-4 p-4 border border-cyan-800 rounded-lg">
+                <h3 class="text-lg text-cyan-300 mb-2">Datos del Cliente Seleccionado:</h3>
+                <p>ID: <span id="reciboClienteId" class="text-white"></span></p>
+                <p>Nombre: <span id="reciboClienteNombre" class="text-white"></span></p>
+                <p>Saldo Actual: <span id="reciboClienteSaldo" class="text-white"></span></p>
+            </div>
 
-        // Pega aquí el código del archivo app.js
-        // Este código va dentro de la etiqueta <script> en index.html
+            <div class="flex space-x-4 mb-4">
+                <button id="btnGenerarReciboTexto" class="btn-dark flex-1">Generar Recibo (Texto)</button>
+                <button id="btnGenerarReciboPDF" class="btn-green flex-1">Generar Recibo (PDF)</button>
+            </div>
 
-document.addEventListener('DOMContentLoaded', () => {
-    // ---- VARIABLES GLOBALES Y ESTADO DE LA APP ----
-    const db = {
-        clientes: [],
-        inventario: [],
-        offlineQueue: []
-    };
-    
-    // ---- ELEMENTOS DEL DOM ----
-    const loadingScreen = document.getElementById('loading-screen');
-    const matrixCanvas = document.getElementById('matrix-canvas');
-    const appContainer = document.getElementById('app-container');
-    const notificationModal = document.getElementById('notification-modal');
-    const notificationMessage = document.getElementById('notification-message');
-    const notificationOkBtn = document.getElementById('notification-ok');
+            <div id="ultimosMovimientos" class="mt-6 border border-cyan-800 rounded-lg p-4">
+                <h3 class="text-lg text-yellow-300 mb-2">Últimos 6 Movimientos:</h3>
+                <pre id="reciboMovimientosTexto" class="bg-gray-800 p-3 rounded text-sm overflow-auto max-h-60"></pre>
+                <button id="btnCopiarRecibo" class="btn-dark mt-4 w-full">Copiar Recibo</button>
+            </div>
+        </div>
 
-    // ---- INICIALIZACIÓN ----
-    initMatrixEffect();
-    initApp();
+        <div id="contentMasOpciones" class="tab-content hidden">
+            <h2 class="text-2xl text-purple-300 mb-4">Más Opciones</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <button id="btnGoInventario" class="btn-dark">Gestión de Inventario</button>
+                <button id="btnGoClientes" class="btn-dark">Gestión de Clientes</button>
+                <button id="btnGoCierres" class="btn-dark">Cierres de Caja</button>
+            </div>
 
-    function initApp() {
+            <div id="sectionInventario" class="hidden">
+                <h3 class="text-xl text-yellow-300 mb-4">Gestión de Inventario</h3>
+                <div class="mb-4">
+                    <label for="inventarioIdProducto" class="block text-cyan-400 text-sm font-bold mb-2">ID Producto:</label>
+                    <input type="text" id="inventarioIdProducto" class="input-dark w-full" placeholder="ID Único del Producto">
+                </div>
+                <div class="mb-4">
+                    <label for="inventarioNombreProducto" class="block text-cyan-400 text-sm font-bold mb-2">Nombre Producto:</label>
+                    <input type="text" id="inventarioNombreProducto" class="input-dark w-full" placeholder="Nombre del Producto">
+                </div>
+                <div class="mb-4">
+                    <label for="inventarioPrecio" class="block text-cyan-400 text-sm font-bold mb-2">Precio:</label>
+                    <input type="number" id="inventarioPrecio" class="input-dark w-full" step="0.01" placeholder="0.00">
+                </div>
+                <div class="mb-4">
+                    <label for="inventarioStock" class="block text-cyan-400 text-sm font-bold mb-2">Stock:</label>
+                    <input type="number" id="inventarioStock" class="input-dark w-full" step="1" placeholder="0">
+                </div>
+                <div class="flex space-x-4 mb-6">
+                    <button id="btnGuardarProducto" class="btn-dark">Guardar Producto</button>
+                    <button id="btnActualizarProducto" class="btn-green">Actualizar Producto</button>
+                    <button id="btnEliminarProducto" class="btn-red">Eliminar Producto</button>
+                    <button id="btnLimpiarInventario" class="btn-red">Limpiar</button>
+                </div>
+
+                <h4 class="text-lg text-cyan-300 mb-2">Lista de Productos:</h4>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-gray-900 table-dark">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Precio</th>
+                                <th>Stock</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventarioLista">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="sectionClientes" class="hidden">
+                <h3 class="text-xl text-yellow-300 mb-4">Gestión de Clientes</h3>
+                <div class="mb-4">
+                    <label for="clienteId" class="block text-cyan-400 text-sm font-bold mb-2">ID Cliente:</label>
+                    <input type="text" id="clienteId" class="input-dark w-full" placeholder="ID Único del Cliente">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteNombre" class="block text-cyan-400 text-sm font-bold mb-2">Nombre:</label>
+                    <input type="text" id="clienteNombre" class="input-dark w-full" placeholder="Nombre Completo">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteCelular" class="block text-cyan-400 text-sm font-bold mb-2">Celular:</label>
+                    <input type="text" id="clienteCelular" class="input-dark w-full" placeholder="Número de Celular">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteDireccion" class="block text-cyan-400 text-sm font-bold mb-2">Dirección:</label>
+                    <input type="text" id="clienteDireccion" class="input-dark w-full" placeholder="Dirección del Cliente">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteCI" class="block text-cyan-400 text-sm font-bold mb-2">CI:</label>
+                    <input type="text" id="clienteCI" class="input-dark w-full" placeholder="Carnet de Identidad">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteSaldoActual" class="block text-cyan-400 text-sm font-bold mb-2">Saldo Actual:</label>
+                    <input type="number" id="clienteSaldoActual" class="input-dark w-full" step="0.01" placeholder="0.00">
+                </div>
+                <div class="flex space-x-4 mb-6">
+                    <button id="btnGuardarCliente" class="btn-dark">Guardar Cliente</button>
+                    <button id="btnActualizarCliente" class="btn-green">Actualizar Cliente</button>
+                    <button id="btnLimpiarCliente" class="btn-red">Limpiar</button>
+                </div>
+
+                <h4 class="text-lg text-cyan-300 mb-2">Lista de Clientes:</h4>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-gray-900 table-dark">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Celular</th>
+                                <th>Saldo</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientesLista">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="sectionCierres" class="hidden">
+                <h3 class="text-xl text-yellow-300 mb-4">Cierres de Caja</h3>
+                <div class="mb-4">
+                    <label for="cierresFechaInicio" class="block text-cyan-400 text-sm font-bold mb-2">Fecha Inicio:</label>
+                    <input type="date" id="cierresFechaInicio" class="input-dark w-full">
+                </div>
+                <div class="mb-4">
+                    <label for="cierresFechaFin" class="block text-cyan-400 text-sm font-bold mb-2">Fecha Fin:</label>
+                    <input type="date" id="cierresFechaFin" class="input-dark w-full">
+                </div>
+                <div class="flex space-x-4 mb-6">
+                    <button id="btnConsultarCierres" class="btn-dark">Consultar Cierres</button>
+                    <button id="btnExportarCierresPDF" class="btn-green">Exportar PDF</button>
+                    <button id="btnLimpiarCierres" class="btn-red">Limpiar</button>
+                </div>
+
+                <div id="resultadosCierres" class="mt-6 border border-cyan-800 rounded-lg p-4 hidden">
+                    <h4 class="text-lg text-cyan-300 mb-2">Resultados del Cierre:</h4>
+                    <p>Saldo Inicial: <span id="cierreSaldoInicial" class="text-white">0.00</span></p>
+                    <p>Total Entradas (Pagos): <span id="cierreTotalEntradas" class="text-white">0.00</span></p>
+                    <p>Total Ventas (Cobradas): <span id="cierreTotalVentas" class="text-white">0.00</span></p>
+                    <p>Saldo Final: <span id="cierreSaldoFinal" class="text-white font-bold">0.00</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            Cargando...
+        </div>
+
+        <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg transition-all duration-300 opacity-0 z-50">
+            Mensaje aquí
+        </div>
+
+        <div id="receiptModal" class="modal hidden">
+            <div class="modal-content">
+                <h3 class="text-xl mb-4">Recibo Generado</h3>
+                <pre id="receiptTextOutput" class="bg-gray-800 p-3 rounded text-sm overflow-auto max-h-60 text-white"></pre>
+                <div class="flex justify-end mt-4">
+                    <button id="copyReceiptButton" class="btn-dark mr-2">Copiar Recibo</button>
+                    <button id="closeReceiptModalButton" class="btn-red">Cerrar</button>
+                </div>
+            </div>
+        </div>
+
+    </div> <script>
+        // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('service-worker.js')
-                .then(registration => console.log('Service Worker registrado con éxito:', registration))
-                .catch(error => console.log('Error al registrar Service Worker:', error));
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado con éxito:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Error al registrar Service Worker:', error);
+                    });
+            });
         }
-        loadLocalData();
-        fetchInitialData();
-        setupEventListeners();
-        renderVentasTab(); // Render inicial
-    }
-    
-    // ---- EFECTO MATRIX ----
-    function initMatrixEffect() {
-       const ctx = matrixCanvas.getContext('2d');
-       matrixCanvas.width = window.innerWidth;
-       matrixCanvas.height = window.innerHeight;
 
-       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890@#$%^&*()*&^%+-/~{[|`]}';
-       const fontSize = 16;
-       const columns = matrixCanvas.width / fontSize;
-       const drops = Array(Math.floor(columns)).fill(1);
+        // MATRIX BACKGROUND ANIMATION (optional, for loading screen)
+        const matrixBg = document.getElementById('matrix-loading-bg');
+        if (matrixBg) {
+            const characters = '0123456789ABCDEF'; // Hex characters for matrix
+            const columnCount = 50; // Adjust for more/fewer columns
+            const charCount = 30; // Adjust for length of columns
 
-       function draw() {
-           ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-           ctx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
-           ctx.fillStyle = '#00ff41'; // Verde Matrix
-           ctx.font = `${fontSize}px monospace`;
+            for (let i = 0; i < columnCount; i++) {
+                const column = document.createElement('div');
+                column.classList.add('matrix-column');
+                let columnText = '';
+                for (let j = 0; j < charCount; j++) {
+                    columnText += characters[Math.floor(Math.random() * characters.length)] + '\n';
+                }
+                column.innerHTML = columnText.split('').map(char => `<span class="matrix-char">${char}</span>`).join('');
+                column.style.animationDuration = `${Math.random() * 5 + 5}s`; // Random speed 5-10s
+                column.style.animationDelay = `${Math.random() * -10}s`; // Start at random positions
+                column.style.left = `${(i / columnCount) * 100}%`;
+                matrixBg.appendChild(column);
+            }
+            // Hide matrix after initial load
+            setTimeout(() => {
+                matrixBg.classList.add('hidden');
+                document.getElementById('app-content').classList.remove('hidden');
+            }, 3000); // Hide after 3 seconds for initial effect
+        }
 
-           for (let i = 0; i < drops.length; i++) {
-               const text = letters.charAt(Math.floor(Math.random() * letters.length));
-               ctx.fillText(text, i * fontSize, drops[i] * fontSize);
 
-               if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) {
-                   drops[i] = 0;
-               }
-               drops[i]++;
-           }
-       }
-       const matrixInterval = setInterval(draw, 33);
+        // --- CONFIGURACIÓN Y FUNCIONES GLOBALES ---
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0Eo-hHnvVFESGW8LRVBrFGInzEUa6B8H2QDH4-tvac1OhUNBHxwy33WR8wb9vPIK8/exec';
+        let onlineData = {
+            clientes: [],
+            inventario: [],
+            transacciones: []
+        };
+        let offlineData = {
+            clientes: [],
+            inventario: [],
+            transacciones: []
+        };
+        let appInitialized = false;
 
-       // Detener la animación después de un tiempo para mostrar la app
-       setTimeout(() => {
-           clearInterval(matrixInterval);
-           loadingScreen.style.opacity = '0';
-           setTimeout(() => {
-               loadingScreen.style.display = 'none';
-               appContainer.classList.remove('hidden');
-           }, 500);
-       }, 3000);
-    }
-    
-    // ---- MANEJO DE DATOS (ONLINE/OFFLINE) ----
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            if (type === 'success') {
+                toast.style.backgroundColor = '#10B981'; // Green
+            } else if (type === 'error') {
+                toast.style.backgroundColor = '#EF4444'; // Red
+            } else {
+                toast.style.backgroundColor = '#3B82F6'; // Blue
+            }
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 3000);
+        }
 
-    function showNotification(message) {
-        notificationMessage.textContent = message;
-        notificationModal.classList.remove('hidden');
-    }
+        function showLoading(show) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (show) {
+                loadingOverlay.classList.remove('hidden');
+            } else {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
 
-    function hideNotification() {
-        notificationModal.classList.add('hidden');
-    }
-    
-    async function fetchInitialData() {
-        // Lógica para obtener datos
-    }
+        // --- FUNCIONES DE INTERACCIÓN CON GOOGLE APPS SCRIPT (API) ---
+        async function fetchData(action, params = {}) {
+            try {
+                if (!navigator.onLine) {
+                    showToast('Estás offline. Los datos mostrados pueden no ser los más recientes.', 'info');
+                    return null; // Don't try to fetch if offline
+                }
+                showLoading(true);
+                const queryParams = new URLSearchParams({ action, ...params }).toString();
+                const response = await fetch(`${SCRIPT_URL}?${queryParams}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                showLoading(false);
+                if (data.status === 'success') {
+                    return data.data;
+                } else {
+                    showToast(`Error de API: ${data.message}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                showLoading(false);
+                showToast(`Error al conectar con el servidor: ${error.message}`, 'error');
+                return null;
+            }
+        }
 
-    // ---- RENDERIZADO DE VISTAS ----
-    function renderVentasTab() {
-        const container = document.getElementById('tab-ventas');
-        container.innerHTML = `
-            <p class="text-xl text-cyan-400">Nueva Venta / Pago</p>
-            <!-- Formulario de venta aquí -->
-        `;
-    }
+        async function postData(action, payload) {
+            try {
+                if (!navigator.onLine) {
+                    showToast('Estás offline. La acción se guardará localmente para sincronizar.', 'info');
+                    await saveOfflineAction({ action, payload });
+                    return { status: 'offline_queued', message: 'Acción guardada para sincronizar offline.' };
+                }
+                showLoading(true);
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({ action, payload: JSON.stringify(payload) }).toString(),
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                showLoading(false);
+                if (data.status === 'success') {
+                    showToast(data.message, 'success');
+                    return data;
+                } else {
+                    showToast(`Error de API: ${data.message}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                showLoading(false);
+                showToast(`Error al conectar con el servidor: ${error.message}`, 'error');
+                return null;
+            }
+        }
 
-    // ---- MANEJADORES DE EVENTOS ----
-    function setupEventListeners() {
-        // Tabs Principales
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', e => {
-                const tabName = e.target.dataset.tab;
-                
-                // Actualizar botones
-                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-                e.target.classList.add('active');
+        // --- GESTIÓN DE DATOS OFFLINE (IndexedDB) ---
+        const DB_NAME = 'ALESFUN_CRM_DB';
+        const DB_VERSION = 1;
+        const STORE_NAMES = ['clientes', 'inventario', 'transacciones', 'offline_actions'];
 
-                // Actualizar contenido
-                document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
-                document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+        function openDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    STORE_NAMES.forEach(storeName => {
+                        if (!db.objectStoreNames.contains(storeName)) {
+                            db.createObjectStore(storeName, { keyPath: storeName === 'offline_actions' ? 'id' : 'ID_CLIENTE' || 'ID_PRODUCTO', autoIncrement: storeName === 'offline_actions' });
+                        }
+                    });
+                };
+
+                request.onsuccess = (event) => {
+                    resolve(event.target.result);
+                };
+
+                request.onerror = (event) => {
+                    reject('Error al abrir IndexedDB:', event.target.error);
+                };
+            });
+        }
+
+        async function saveLocalData(storeName, data) {
+            const db = await openDatabase();
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            store.clear(); // Clear previous data
+            data.forEach(item => store.put(item));
+            await tx.done;
+        }
+
+        async function loadLocalData(storeName) {
+            const db = await openDatabase();
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const data = await store.getAll();
+            await tx.done;
+            return data;
+        }
+
+        async function saveOfflineAction(action) {
+            const db = await openDatabase();
+            const tx = db.transaction('offline_actions', 'readwrite');
+            const store = tx.objectStore('offline_actions');
+            store.add({ id: Date.now(), ...action });
+            await tx.done;
+            showToast('Acción guardada para sincronizar.', 'info');
+        }
+
+        async function getOfflineActions() {
+            const db = await openDatabase();
+            const tx = db.transaction('offline_actions', 'readonly');
+            const store = tx.objectStore('offline_actions');
+            const actions = await store.getAll();
+            await tx.done;
+            return actions;
+        }
+
+        async function clearOfflineActions(ids) {
+            const db = await openDatabase();
+            const tx = db.transaction('offline_actions', 'readwrite');
+            const store = tx.objectStore('offline_actions');
+            for (const id of ids) {
+                store.delete(id);
+            }
+            await tx.done;
+        }
+
+        async function synchronizeData() {
+            if (!navigator.onLine) {
+                showToast('No hay conexión a internet para sincronizar.', 'error');
+                return;
+            }
+            showLoading(true);
+            showToast('Sincronizando datos...', 'info');
+
+            // 1. Enviar acciones offline pendientes
+            const offlineActions = await getOfflineActions();
+            const successfulActionIds = [];
+            for (const action of offlineActions) {
+                try {
+                    const result = await postData(action.action, action.payload);
+                    if (result && result.status === 'success') {
+                        successfulActionIds.push(action.id);
+                    }
+                } catch (error) {
+                    console.error('Error al re-enviar acción offline:', error);
+                    // No remove if failed, try again later
+                }
+            }
+            if (successfulActionIds.length > 0) {
+                await clearOfflineActions(successfulActionIds);
+                showToast(`${successfulActionIds.length} acciones offline sincronizadas.`, 'success');
+            }
+
+            // 2. Descargar todos los datos frescos
+            const dataClients = await fetchData('getClientes');
+            const dataInventario = await fetchData('getInventario');
+            const dataTransacciones = await fetchData('getTransacciones');
+
+            if (dataClients) {
+                onlineData.clientes = dataClients;
+                await saveLocalData('clientes', dataClients);
+            }
+            if (dataInventario) {
+                onlineData.inventario = dataInventario;
+                await saveLocalData('inventario', dataInventario);
+            }
+            if (dataTransacciones) {
+                onlineData.transacciones = dataTransacciones;
+                await saveLocalData('transacciones', dataTransacciones);
+            }
+
+            // Actualizar la UI con los datos más recientes
+            await updateAllLists();
+            showLoading(false);
+            showToast('Sincronización completa.', 'success');
+        }
+
+        // --- GESTIÓN DE LA UI Y LÓGICA DE LA APLICACIÓN ---
+
+        // Elementos UI principales
+        const tabVentas = document.getElementById('tabVentas');
+        const tabRecibos = document.getElementById('tabRecibos');
+        const tabMasOpciones = document.getElementById('tabMasOpciones');
+
+        const contentVentas = document.getElementById('contentVentas');
+        const contentRecibos = document.getElementById('contentRecibos');
+        const contentMasOpciones = document.getElementById('contentMasOpciones');
+
+        const btnGoInventario = document.getElementById('btnGoInventario');
+        const btnGoClientes = document.getElementById('btnGoClientes');
+        const btnGoCierres = document.getElementById('btnGoCierres');
+
+        const sectionInventario = document.getElementById('sectionInventario');
+        const sectionClientes = document.getElementById('sectionClientes');
+        const sectionCierres = document.getElementById('sectionCierres');
+
+        // Función para cambiar de pestaña
+        function showTab(tabContentId) {
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+            document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+
+            document.getElementById(tabContentId).classList.remove('hidden');
+            if (tabContentId === 'contentVentas') tabVentas.classList.add('active');
+            else if (tabContentId === 'contentRecibos') tabRecibos.classList.add('active');
+            else if (tabContentId === 'contentMasOpciones') tabMasOpciones.classList.add('active');
+
+            // Reset Mas Opciones sections when returning to it
+            if (tabContentId === 'contentMasOpciones') {
+                sectionInventario.classList.add('hidden');
+                sectionClientes.classList.add('hidden');
+                sectionCierres.classList.add('hidden');
+            }
+        }
+
+        // Función para cambiar de sección en "Más Opciones"
+        function showOptionSection(sectionId) {
+            document.querySelectorAll('#contentMasOpciones > div').forEach(section => {
+                if (section.id !== 'sectionInventario' && section.id !== 'sectionClientes' && section.id !== 'sectionCierres') {
+                    // This hides the initial buttons row
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+            document.getElementById(sectionId).classList.remove('hidden');
+            updateAllLists(); // Refresh lists when entering a section
+        }
+
+        // --- VENTAS ---
+        const ventaClienteSearch = document.getElementById('ventaClienteSearch');
+        const ventaClienteSuggestions = document.getElementById('ventaClienteSuggestions');
+        const ventaClienteIdSpan = document.getElementById('ventaClienteId');
+        const ventaClienteNombreSpan = document.getElementById('ventaClienteNombre');
+        const ventaClienteSaldoSpan = document.getElementById('ventaClienteSaldo');
+        const soloPagoACuentaCheckbox = document.getElementById('soloPagoACuenta');
+        const productosVentaSection = document.getElementById('productosVentaSection');
+        const productoSearch = document.getElementById('productoSearch');
+        const productoSuggestions = document.getElementById('productoSuggestions');
+        const productosSeleccionadosDiv = document.getElementById('productosSeleccionados');
+        const ventaTotalPagarSpan = document.getElementById('ventaTotalPagar');
+        const ventaSaldoPendienteVentaSpan = document.getElementById('ventaSaldoPendienteVenta');
+        const ventaMontoPagoInput = document.getElementById('ventaMontoPago');
+        const ventaCambioSpan = document.getElementById('ventaCambio');
+        const ventaNuevoSaldoClienteSpan = document.getElementById('ventaNuevoSaldoCliente');
+        const btnRegistrarVenta = document.getElementById('btnRegistrarVenta');
+        const btnLimpiarVenta = document.getElementById('btnLimpiarVenta');
+
+        let selectedVentaCliente = null;
+        let selectedProducts = {}; // { ID_PRODUCTO: { productData, cantidad } }
+
+        function formatCurrency(value) {
+            return parseFloat(value).toFixed(2);
+        }
+
+        async function filterClienteSuggestions(inputElement, suggestionsDiv, callback) {
+            const query = inputElement.value.toUpperCase().trim();
+            suggestionsDiv.innerHTML = '';
+            if (query.length < 1) {
+                suggestionsDiv.classList.add('hidden');
+                return;
+            }
+
+            const filteredClientes = (onlineData.clientes || []).filter(c =>
+                c.NOMBRE.includes(query) || (c.ID_CLIENTE && c.ID_CLIENTE.includes(query))
+            ).slice(0, 10); // Limit to 10 suggestions
+
+            if (filteredClientes.length > 0) {
+                suggestionsDiv.classList.remove('hidden');
+                filteredClientes.forEach(cliente => {
+                    const div = document.createElement('div');
+                    div.classList.add('p-2', 'cursor-pointer', 'hover:bg-cyan-700', 'border-b', 'border-cyan-800');
+                    div.textContent = `${cliente.NOMBRE} (ID: ${cliente.ID_CLIENTE || 'N/A'}) - Saldo: ${formatCurrency(cliente.SALDO_ACTUAL)}`;
+                    div.onclick = () => {
+                        inputElement.value = cliente.NOMBRE;
+                        suggestionsDiv.classList.add('hidden');
+                        if (callback) callback(cliente);
+                    };
+                    suggestionsDiv.appendChild(div);
+                });
+            } else {
+                suggestionsDiv.classList.add('hidden');
+            }
+        }
+
+        async function filterProductSuggestions() {
+            const query = productoSearch.value.toUpperCase().trim();
+            productoSuggestions.innerHTML = '';
+            if (query.length < 1) {
+                productoSuggestions.classList.add('hidden');
+                return;
+            }
+
+            const filteredProducts = (onlineData.inventario || []).filter(p =>
+                p.NOMBRE.includes(query) || (p.ID_PRODUCTO && p.ID_PRODUCTO.includes(query))
+            ).slice(0, 10);
+
+            if (filteredProducts.length > 0) {
+                productoSuggestions.classList.remove('hidden');
+                filteredProducts.forEach(product => {
+                    const div = document.createElement('div');
+                    div.classList.add('p-2', 'cursor-pointer', 'hover:bg-cyan-700', 'border-b', 'border-cyan-800');
+                    div.textContent = `${product.NOMBRE} (Cód: ${product.ID_PRODUCTO || 'N/A'}) - Precio: ${formatCurrency(product.PRECIO)} - Stock: ${product.STOCK}`;
+                    div.onclick = () => {
+                        addProductToSale(product);
+                        productoSearch.value = '';
+                        productoSuggestions.classList.add('hidden');
+                    };
+                    productoSuggestions.appendChild(div);
+                });
+            } else {
+                productoSuggestions.classList.add('hidden');
+            }
+        }
+
+        function selectVentaCliente(cliente) {
+            selectedVentaCliente = cliente;
+            ventaClienteIdSpan.textContent = cliente.ID_CLIENTE || 'N/A';
+            ventaClienteNombreSpan.textContent = cliente.NOMBRE;
+            ventaClienteSaldoSpan.textContent = formatCurrency(cliente.SALDO_ACTUAL);
+            calculateVentaSummary(); // Recalculate based on selected client
+        }
+
+        function addProductToSale(product) {
+            if (selectedProducts[product.ID_PRODUCTO]) {
+                selectedProducts[product.ID_PRODUCTO].cantidad++;
+            } else {
+                selectedProducts[product.ID_PRODUCTO] = { ...product, cantidad: 1 };
+            }
+            renderSelectedProducts();
+            calculateVentaSummary();
+        }
+
+        function removeProductFromSale(productId) {
+            delete selectedProducts[productId];
+            renderSelectedProducts();
+            calculateVentaSummary();
+        }
+
+        function renderSelectedProducts() {
+            productosSeleccionadosDiv.innerHTML = '';
+            for (const id in selectedProducts) {
+                const item = selectedProducts[id];
+                const productDiv = document.createElement('div');
+                productDiv.classList.add('flex', 'items-center', 'justify-between', 'bg-gray-800', 'p-2', 'rounded', 'mb-2');
+                productDiv.innerHTML = `
+                    <span class="flex-1">${item.NOMBRE} (Cód: ${item.ID_PRODUCTO})</span>
+                    <input type="number" value="${item.cantidad}" min="1" class="input-dark w-20 mx-2 text-center"
+                           onchange="updateProductQuantity('${item.ID_PRODUCTO}', this.value)">
+                    <input type="number" value="${formatCurrency(item.PRECIO)}" step="0.01" class="input-dark w-24 mx-2 text-center"
+                           onchange="updateProductPrice('${item.ID_PRODUCTO}', this.value)">
+                    <span class="w-20 text-right">Total: ${formatCurrency(item.cantidad * item.PRECIO)}</span>
+                    <button class="btn-red ml-2 p-1 text-sm" onclick="removeProductFromSale('${item.ID_PRODUCTO}')">X</button>
+                `;
+                productosSeleccionadosDiv.appendChild(productDiv);
+            }
+        }
+
+        function updateProductQuantity(productId, quantity) {
+            quantity = parseInt(quantity);
+            if (quantity > 0 && selectedProducts[productId]) {
+                selectedProducts[productId].cantidad = quantity;
+                renderSelectedProducts(); // Re-render to update total for item
+                calculateVentaSummary();
+            }
+        }
+
+        function updateProductPrice(productId, price) {
+            price = parseFloat(price);
+            if (price >= 0 && selectedProducts[productId]) {
+                selectedProducts[productId].PRECIO = price;
+                renderSelectedProducts(); // Re-render to update total for item
+                calculateVentaSummary();
+            }
+        }
+
+        function calculateVentaSummary() {
+            let totalPagar = 0;
+            if (!soloPagoACuentaCheckbox.checked) {
+                for (const id in selectedProducts) {
+                    const item = selectedProducts[id];
+                    totalPagar += item.cantidad * item.PRECIO;
+                }
+            }
+
+            const montoPago = parseFloat(ventaMontoPagoInput.value) || 0;
+            const clienteSaldoActual = parseFloat(selectedVentaCliente ? selectedVentaCliente.SALDO_ACTUAL : 0);
+
+            let saldoPendienteVenta = totalPagar; // For display, how much of this specific sale is pending
+            let nuevoSaldoCliente = clienteSaldoActual;
+            let cambio = 0;
+
+            if (soloPagoACuentaCheckbox.checked) {
+                nuevoSaldoCliente = clienteSaldoActual - montoPago;
+                saldoPendienteVenta = 0; // No sale, so no sale pending
+                cambio = Math.max(0, montoPago - clienteSaldoActual); // If payment > current balance
+                if (montoPago < 0) {
+                     nuevoSaldoCliente = clienteSaldoActual; // Don't allow negative payment to increase balance
+                     cambio = 0;
+                }
+            } else { // It's a sale
+                saldoPendienteVenta = totalPagar - montoPago;
+                if (saldoPendienteVenta < 0) { // If paid more than total sale
+                    cambio = Math.abs(saldoPendienteVenta);
+                    saldoPendienteVenta = 0;
+                    nuevoSaldoCliente = clienteSaldoActual; // Saldo cliente no cambia por el cambio de la venta
+                } else { // If paid less or exactly total sale
+                    nuevoSaldoCliente = clienteSaldoActual + saldoPendienteVenta;
+                    cambio = 0;
+                }
+            }
+            
+            // Ensure saldo is always non-negative unless it was already negative
+            nuevoSaldoCliente = parseFloat(nuevoSaldoCliente.toFixed(2));
+            if (nuevoSaldoCliente < 0 && soloPagoACuentaCheckbox.checked && montoPago > Math.abs(clienteSaldoActual)) {
+                // If it's a payment that covers more than debt, balance should not go negative.
+                // The extra is 'cambio'.
+                nuevoSaldoCliente = 0;
+            }
+
+
+            ventaTotalPagarSpan.textContent = formatCurrency(totalPagar);
+            ventaSaldoPendienteVentaSpan.textContent = formatCurrency(saldoPendienteVenta);
+            ventaCambioSpan.textContent = formatCurrency(cambio);
+            ventaNuevoSaldoClienteSpan.textContent = formatCurrency(nuevoSaldoCliente);
+        }
+
+        async function registerVenta() {
+            if (!selectedVentaCliente) {
+                showToast('Por favor, selecciona un cliente primero.', 'error');
+                return;
+            }
+
+            const isPagoACuenta = soloPagoACuentaCheckbox.checked;
+            const montoPago = parseFloat(ventaMontoPagoInput.value) || 0;
+            const clienteId = selectedVentaCliente.ID_CLIENTE;
+            const clienteSaldoActual = parseFloat(selectedVentaCliente.SALDO_ACTUAL);
+
+            let totalVenta = 0;
+            let transactionDescription = '';
+            let transactionType = '';
+            let transactionAmount = 0; // This is the amount that goes into the books for the transaction itself
+
+            if (isPagoACuenta) {
+                if (montoPago <= 0) {
+                    showToast('Para pago a cuenta, el monto debe ser mayor a 0.', 'error');
+                    return;
+                }
+                transactionType = 'PAGO A CUENTA';
+                transactionDescription = 'PAGO A CUENTA';
+                transactionAmount = montoPago;
+
+                // Update client balance locally for immediate UI feedback
+                selectedVentaCliente.SALDO_ACTUAL = clienteSaldoActual - montoPago;
+
+            } else { // Es una venta de productos
+                if (Object.keys(selectedProducts).length === 0) {
+                    showToast('Por favor, añade productos a la venta.', 'error');
+                    return;
+                }
+
+                totalVenta = Object.values(selectedProducts).reduce((sum, item) => sum + (item.cantidad * item.PRECIO), 0);
+                transactionType = 'VENTA';
+                transactionDescription = Object.values(selectedProducts).map(p => `${p.NOMBRE} x${p.cantidad} @${formatCurrency(p.PRECIO)}`).join('; ');
+                transactionAmount = totalVenta; // Amount of the sale, not necessarily what was paid
+
+                // Update stock locally for immediate UI feedback
+                for (const productId in selectedProducts) {
+                    const soldItem = selectedProducts[productId];
+                    const inventoryItem = onlineData.inventario.find(i => i.ID_PRODUCTO === productId);
+                    if (inventoryItem) {
+                        inventoryItem.STOCK -= soldItem.cantidad;
+                    }
+                }
+                // Update client balance locally for immediate UI feedback based on remaining debt
+                const saldoPendienteDeVenta = totalVenta - montoPago;
+                if (saldoPendienteDeVenta > 0) {
+                    selectedVentaCliente.SALDO_ACTUAL = clienteSaldoActual + saldoPendienteDeVenta;
+                } else if (saldoPendienteDeVenta < 0 && clienteSaldoActual < 0) { // If client had previous debt and paid more
+                     selectedVentaCliente.SALDO_ACTUAL = clienteSaldoActual + totalVenta;
+                     if (selectedVentaCliente.SALDO_ACTUAL > 0) selectedVentaCliente.SALDO_ACTUAL = 0; // Balance doesn't go positive from change
+                }
+            }
+            
+            // Ensure balance doesn't become negative if it was 0 and client paid more for a sale
+            // or if a payment exceeds a negative balance.
+            selectedVentaCliente.SALDO_ACTUAL = parseFloat(selectedVentaCliente.SALDO_ACTUAL.toFixed(2));
+
+
+            const initialClientSaldo = clienteSaldoActual; // Saldo antes de esta transacción
+            const finalClientSaldo = selectedVentaCliente.SALDO_ACTUAL; // Saldo después de esta transacción
+
+            showLoading(true);
+            try {
+                // Register sale/payment
+                const result = await postData('addTransaction', {
+                    ID_CLIENTE: clienteId,
+                    TIPO: transactionType,
+                    DESCRIPCION: transactionDescription,
+                    MONTO: transactionAmount,
+                    SALDO_ANTERIOR: initialClientSaldo,
+                    SALDO_NUEVO: finalClientSaldo
+                });
+
+                if (result && result.status === 'success' || result.status === 'offline_queued') {
+                    // Update client balance in DB if online
+                    await postData('updateClienteSaldo', {
+                        ID_CLIENTE: clienteId,
+                        SALDO_ACTUAL: finalClientSaldo
+                    });
+
+                    // Update stock in DB if online
+                    if (!isPagoACuenta) {
+                        for (const productId in selectedProducts) {
+                            const soldItem = selectedProducts[productId];
+                            await postData('updateProductoStock', {
+                                ID_PRODUCTO: productId,
+                                CANTIDAD_VENDIDA: soldItem.cantidad // Send quantity sold, not final stock
+                            });
+                        }
+                    }
+
+                    showToast(result.message, 'success');
+                    await synchronizeData(); // Re-sync all data after successful transaction/queue
+                    generateAndCopyReceipt(selectedVentaCliente, isPagoACuenta, transactionAmount, totalVenta, initialClientSaldo, finalClientSaldo, selectedProducts, montoPago);
+                    clearVentaForm();
+                }
+            } catch (error) {
+                showToast(`Error al registrar: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function clearVentaForm() {
+            ventaClienteSearch.value = '';
+            ventaClienteIdSpan.textContent = '';
+            ventaClienteNombreSpan.textContent = '';
+            ventaClienteSaldoSpan.textContent = '';
+            selectedVentaCliente = null;
+            soloPagoACuentaCheckbox.checked = false;
+            productosVentaSection.classList.remove('hidden');
+            productoSearch.value = '';
+            productosSeleccionadosDiv.innerHTML = '';
+            selectedProducts = {};
+            ventaMontoPagoInput.value = '';
+            calculateVentaSummary(); // Reset summary values
+        }
+
+        // --- RECIBOS ---
+        const reciboClienteSearch = document.getElementById('reciboClienteSearch');
+        const reciboClienteSuggestions = document.getElementById('reciboClienteSuggestions');
+        const reciboClienteIdSpan = document.getElementById('reciboClienteId');
+        const reciboClienteNombreSpan = document.getElementById('reciboClienteNombre');
+        const reciboClienteSaldoSpan = document.getElementById('reciboClienteSaldo');
+        const btnGenerarReciboTexto = document.getElementById('btnGenerarReciboTexto');
+        const btnGenerarReciboPDF = document.getElementById('btnGenerarReciboPDF');
+        const reciboMovimientosTexto = document.getElementById('reciboMovimientosTexto');
+        const btnCopiarRecibo = document.getElementById('btnCopiarRecibo');
+        const receiptModal = document.getElementById('receiptModal');
+        const receiptTextOutput = document.getElementById('receiptTextOutput');
+        const copyReceiptButton = document.getElementById('copyReceiptButton');
+        const closeReceiptModalButton = document.getElementById('closeReceiptModalButton');
+
+
+        let selectedReciboCliente = null;
+
+        function selectReciboCliente(cliente) {
+            selectedReciboCliente = cliente;
+            reciboClienteIdSpan.textContent = cliente.ID_CLIENTE || 'N/A';
+            reciboClienteNombreSpan.textContent = cliente.NOMBRE;
+            reciboClienteSaldoSpan.textContent = formatCurrency(cliente.SALDO_ACTUAL);
+            loadClientMovements(cliente.ID_CLIENTE);
+        }
+
+        async function loadClientMovements(clientId) {
+            reciboMovimientosTexto.textContent = 'Cargando movimientos...';
+            const clientTransactions = (onlineData.transacciones || [])
+                .filter(t => t.ID_CLIENTE === clientId)
+                .sort((a, b) => new Date(b.FECHA) - new Date(a.FECHA)) // Sort by date descending
+                .slice(0, 6); // Get last 6
+
+            let movementsText = '--- Últimos Movimientos ---\n\n';
+            if (clientTransactions.length === 0) {
+                movementsText += 'No hay movimientos recientes para este cliente.';
+            } else {
+                clientTransactions.forEach(t => {
+                    const fecha = new Date(t.FECHA).toLocaleDateString('es-ES');
+                    const tipo = t.TIPO;
+                    const descripcion = t.DESCRIPCION.length > 50 ? t.DESCRIPCION.substring(0, 50) + '...' : t.DESCRIPCION;
+                    const monto = formatCurrency(t.MONTO);
+                    const saldoAnterior = formatCurrency(t.SALDO_ANTERIOR);
+                    const saldoNuevo = formatCurrency(t.SALDO_NUEVO);
+
+                    movementsText += `Fecha: ${fecha}\n`;
+                    movementsText += `Tipo: ${tipo}\n`;
+                    movementsText += `Descripción: ${descripcion}\n`;
+                    movementsText += `Monto: ${monto}\n`;
+                    movementsText += `Saldo Ant: ${saldoAnterior}\n`;
+                    movementsText += `Saldo Act: ${saldoNuevo}\n`;
+                    movementsText += `--------------------------\n`;
+                });
+            }
+            reciboMovimientosTexto.textContent = movementsText;
+        }
+
+        function generateAndCopyReceipt(cliente, isPagoACuenta, transactionAmount, totalVenta, saldoAnt, saldoActual, productsSold, montoPago) {
+            const now = new Date();
+            const date = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const time = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+            let receipt = `--- RECIBO ALESFUN ---\n`;
+            receipt += `Fecha: ${date} ${time}\n`;
+            receipt += `Cliente: ${cliente.NOMBRE} (ID: ${cliente.ID_CLIENTE})\n`;
+            receipt += `--------------------------\n`;
+
+            if (isPagoACuenta) {
+                receipt += `Tipo: PAGO A CUENTA\n`;
+                receipt += `Monto Pagado: ${formatCurrency(montoPago)}\n`;
+                receipt += `Saldo Anterior: ${formatCurrency(saldoAnt)}\n`;
+                receipt += `Nuevo Saldo: ${formatCurrency(saldoActual)}\n`;
+            } else {
+                receipt += `Tipo: VENTA\n`;
+                receipt += `Productos:\n`;
+                for (const id in productsSold) {
+                    const item = productsSold[id];
+                    receipt += `  - ${item.NOMBRE} x${item.cantidad} @${formatCurrency(item.PRECIO)} = ${formatCurrency(item.cantidad * item.PRECIO)}\n`;
+                }
+                receipt += `Total Venta: ${formatCurrency(totalVenta)}\n`;
+                receipt += `Monto Pagado: ${formatCurrency(montoPago)}\n`;
+                const cambio = Math.max(0, montoPago - totalVenta);
+                if (cambio > 0) {
+                    receipt += `Cambio: ${formatCurrency(cambio)}\n`;
+                }
+                receipt += `Saldo Anterior Cliente: ${formatCurrency(saldoAnt)}\n`;
+                receipt += `Saldo Pendiente Venta (Cliente): ${formatCurrency(Math.max(0, totalVenta - montoPago))}\n`;
+                receipt += `Nuevo Saldo Cliente: ${formatCurrency(saldoActual)}\n`;
+            }
+            receipt += `--------------------------\n`;
+            receipt += `¡Gracias por tu compra/pago!\n`;
+
+            receiptTextOutput.textContent = receipt;
+            receiptModal.classList.remove('hidden');
+
+            // Automatically copy to clipboard
+            navigator.clipboard.writeText(receipt).then(() => {
+                showToast('Recibo copiado al portapapeles automáticamente.', 'success');
+            }).catch(err => {
+                showToast('Error al copiar el recibo.', 'error');
+                console.error('Error al copiar el recibo:', err);
+            });
+        }
+
+        async function generatePdfRecibo() {
+            if (!selectedReciboCliente) {
+                showToast('Por favor, selecciona un cliente para generar el recibo.', 'error');
+                return;
+            }
+            showLoading(true);
+            try {
+                const result = await fetchData('generateReciboPDF', { clientId: selectedReciboCliente.ID_CLIENTE });
+                if (result && result.url) {
+                    window.open(result.url, '_blank');
+                    showToast('PDF generado. Se abrirá en una nueva pestaña.', 'success');
+                } else {
+                    showToast('No se pudo generar el PDF. Intenta de nuevo.', 'error');
+                }
+            } catch (error) {
+                showToast('Error al generar el PDF.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+
+        // --- MAS OPCIONES: INVENTARIO ---
+        const inventarioIdProductoInput = document.getElementById('inventarioIdProducto');
+        const inventarioNombreProductoInput = document.getElementById('inventarioNombreProducto');
+        const inventarioPrecioInput = document.getElementById('inventarioPrecio');
+        const inventarioStockInput = document.getElementById('inventarioStock');
+        const btnGuardarProducto = document.getElementById('btnGuardarProducto');
+        const btnActualizarProducto = document.getElementById('btnActualizarProducto');
+        const btnEliminarProducto = document.getElementById('btnEliminarProducto');
+        const btnLimpiarInventario = document.getElementById('btnLimpiarInventario');
+        const inventarioListaBody = document.getElementById('inventarioLista');
+
+        async function renderInventarioList() {
+            inventarioListaBody.innerHTML = '';
+            (onlineData.inventario || []).forEach(product => {
+                const row = inventarioListaBody.insertRow();
+                row.innerHTML = `
+                    <td>${product.ID_PRODUCTO}</td>
+                    <td>${product.NOMBRE}</td>
+                    <td>${formatCurrency(product.PRECIO)}</td>
+                    <td>${product.STOCK}</td>
+                    <td>
+                        <button class="btn-dark p-1 text-sm" onclick="editProduct('${product.ID_PRODUCTO}')">Editar</button>
+                    </td>
+                `;
+            });
+        }
+
+        function editProduct(productId) {
+            const product = (onlineData.inventario || []).find(p => p.ID_PRODUCTO === productId);
+            if (product) {
+                inventarioIdProductoInput.value = product.ID_PRODUCTO;
+                inventarioNombreProductoInput.value = product.NOMBRE;
+                inventarioPrecioInput.value = product.PRECIO;
+                inventarioStockInput.value = product.STOCK;
+            }
+        }
+
+        async function saveProduct() {
+            const id = inventarioIdProductoInput.value.toUpperCase().trim();
+            const nombre = inventarioNombreProductoInput.value.toUpperCase().trim();
+            const precio = parseFloat(inventarioPrecioInput.value) || 0;
+            const stock = parseInt(inventarioStockInput.value) || 0;
+
+            if (!id || !nombre || precio <= 0 || stock < 0) {
+                showToast('Por favor, completa todos los campos de producto correctamente (ID, Nombre, Precio > 0, Stock >= 0).', 'error');
+                return;
+            }
+
+            const existingProduct = (onlineData.inventario || []).find(p => p.ID_PRODUCTO === id);
+            if (existingProduct) {
+                showToast('Ya existe un producto con este ID. Usa "Actualizar" si quieres modificarlo.', 'error');
+                return;
+            }
+
+            const result = await postData('addProducto', { ID_PRODUCTO: id, NOMBRE: nombre, PRECIO: precio, STOCK: stock });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearInventarioForm();
+            }
+        }
+
+        async function updateProduct() {
+            const id = inventarioIdProductoInput.value.toUpperCase().trim();
+            const nombre = inventarioNombreProductoInput.value.toUpperCase().trim();
+            const precio = parseFloat(inventarioPrecioInput.value) || 0;
+            const stock = parseInt(inventarioStockInput.value) || 0;
+
+            if (!id || !nombre || precio <= 0 || stock < 0) {
+                showToast('Por favor, completa todos los campos de producto correctamente (ID, Nombre, Precio > 0, Stock >= 0).', 'error');
+                return;
+            }
+
+            const existingProduct = (onlineData.inventario || []).find(p => p.ID_PRODUCTO === id);
+            if (!existingProduct) {
+                showToast('No se encontró un producto con este ID para actualizar.', 'error');
+                return;
+            }
+
+            const result = await postData('updateProducto', { ID_PRODUCTO: id, NOMBRE: nombre, PRECIO: precio, STOCK: stock });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearInventarioForm();
+            }
+        }
+
+        async function deleteProduct() {
+            const id = inventarioIdProductoInput.value.toUpperCase().trim();
+            if (!id) {
+                showToast('Por favor, ingresa el ID del producto a eliminar.', 'error');
+                return;
+            }
+
+            const confirmDelete = confirm(`¿Estás seguro de que quieres eliminar el producto con ID: ${id}?`);
+            if (!confirmDelete) return;
+
+            const result = await postData('deleteProducto', { ID_PRODUCTO: id });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearInventarioForm();
+            }
+        }
+
+        function clearInventarioForm() {
+            inventarioIdProductoInput.value = '';
+            inventarioNombreProductoInput.value = '';
+            inventarioPrecioInput.value = '';
+            inventarioStockInput.value = '';
+        }
+
+        // --- MAS OPCIONES: CLIENTES ---
+        const clienteIdInput = document.getElementById('clienteId');
+        const clienteNombreInput = document.getElementById('clienteNombre');
+        const clienteCelularInput = document.getElementById('clienteCelular');
+        const clienteDireccionInput = document.getElementById('clienteDireccion');
+        const clienteCIInput = document.getElementById('clienteCI');
+        const clienteSaldoActualInput = document.getElementById('clienteSaldoActual');
+        const btnGuardarCliente = document.getElementById('btnGuardarCliente');
+        const btnActualizarCliente = document.getElementById('btnActualizarCliente');
+        const btnLimpiarCliente = document.getElementById('btnLimpiarCliente');
+        const clientesListaBody = document.getElementById('clientesLista');
+
+        async function renderClientesList() {
+            clientesListaBody.innerHTML = '';
+            (onlineData.clientes || []).forEach(cliente => {
+                const row = clientesListaBody.insertRow();
+                row.innerHTML = `
+                    <td>${cliente.ID_CLIENTE || 'N/A'}</td>
+                    <td>${cliente.NOMBRE}</td>
+                    <td>${cliente.CELULAR || 'N/A'}</td>
+                    <td>${formatCurrency(cliente.SALDO_ACTUAL)}</td>
+                    <td>
+                        <button class="btn-dark p-1 text-sm" onclick="editCliente('${cliente.ID_CLIENTE}')">Editar</button>
+                    </td>
+                `;
+            });
+        }
+
+        function editCliente(clientId) {
+            const cliente = (onlineData.clientes || []).find(c => c.ID_CLIENTE === clientId);
+            if (cliente) {
+                clienteIdInput.value = cliente.ID_CLIENTE;
+                clienteNombreInput.value = cliente.NOMBRE;
+                clienteCelularInput.value = cliente.CELULAR;
+                clienteDireccionInput.value = cliente.DIRECCION;
+                clienteCIInput.value = cliente.CI;
+                clienteSaldoActualInput.value = cliente.SALDO_ACTUAL;
+            }
+        }
+
+        async function saveCliente() {
+            const id = clienteIdInput.value.toUpperCase().trim();
+            const nombre = clienteNombreInput.value.toUpperCase().trim();
+            const celular = clienteCelularInput.value.trim();
+            const direccion = clienteDireccionInput.value.toUpperCase().trim();
+            const ci = clienteCIInput.value.toUpperCase().trim();
+            const saldo = parseFloat(clienteSaldoActualInput.value) || 0;
+
+            if (!id || !nombre) {
+                showToast('Por favor, completa el ID y el Nombre del cliente.', 'error');
+                return;
+            }
+
+            const existingCliente = (onlineData.clientes || []).find(c => c.ID_CLIENTE === id);
+            if (existingCliente) {
+                showToast('Ya existe un cliente con este ID. Usa "Actualizar" si quieres modificarlo.', 'error');
+                return;
+            }
+
+            const result = await postData('addCliente', { ID_CLIENTE: id, NOMBRE: nombre, CELULAR: celular, DIRECCION: direccion, CI: ci, SALDO_ACTUAL: saldo });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearClienteForm();
+            }
+        }
+
+        async function updateCliente() {
+            const id = clienteIdInput.value.toUpperCase().trim();
+            const nombre = clienteNombreInput.value.toUpperCase().trim();
+            const celular = clienteCelularInput.value.trim();
+            const direccion = clienteDireccionInput.value.toUpperCase().trim();
+            const ci = clienteCIInput.value.toUpperCase().trim();
+            const saldo = parseFloat(clienteSaldoActualInput.value) || 0;
+
+            if (!id || !nombre) {
+                showToast('Por favor, completa el ID y el Nombre del cliente.', 'error');
+                return;
+            }
+
+            const existingCliente = (onlineData.clientes || []).find(c => c.ID_CLIENTE === id);
+            if (!existingCliente) {
+                showToast('No se encontró un cliente con este ID para actualizar.', 'error');
+                return;
+            }
+
+            const result = await postData('updateCliente', { ID_CLIENTE: id, NOMBRE: nombre, CELULAR: celular, DIRECCION: direccion, CI: ci, SALDO_ACTUAL: saldo });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearClienteForm();
+            }
+        }
+
+        function clearClienteForm() {
+            clienteIdInput.value = '';
+            clienteNombreInput.value = '';
+            clienteCelularInput.value = '';
+            clienteDireccionInput.value = '';
+            clienteCIInput.value = '';
+            clienteSaldoActualInput.value = '0.00';
+        }
+
+        // --- MAS OPCIONES: CIERRES ---
+        const cierresFechaInicioInput = document.getElementById('cierresFechaInicio');
+        const cierresFechaFinInput = document.getElementById('cierresFechaFin');
+        const btnConsultarCierres = document.getElementById('btnConsultarCierres');
+        const btnExportarCierresPDF = document.getElementById('btnExportarCierresPDF');
+        const btnLimpiarCierres = document.getElementById('btnLimpiarCierres');
+        const resultadosCierresDiv = document.getElementById('resultadosCierres');
+        const cierreSaldoInicialSpan = document.getElementById('cierreSaldoInicial');
+        const cierreTotalEntradasSpan = document.getElementById('cierreTotalEntradas');
+        const cierreTotalVentasSpan = document.getElementById('cierreTotalVentas');
+        const cierreSaldoFinalSpan = document.getElementById('cierreSaldoFinal');
+
+        async function consultarCierres() {
+            const fechaInicio = cierresFechaInicioInput.value;
+            const fechaFin = cierresFechaFinInput.value;
+
+            if (!fechaInicio || !fechaFin) {
+                showToast('Por favor, selecciona las fechas de inicio y fin.', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const result = await fetchData('getCierreCaja', { startDate: fechaInicio, endDate: fechaFin });
+                if (result) {
+                    cierreSaldoInicialSpan.textContent = formatCurrency(result.saldoInicial);
+                    cierreTotalEntradasSpan.textContent = formatCurrency(result.totalPagosACuenta);
+                    cierreTotalVentasSpan.textContent = formatCurrency(result.totalVentasEfectivas); // This is sales effectively paid
+                    cierreSaldoFinalSpan.textContent = formatCurrency(result.saldoFinal);
+                    resultadosCierresDiv.classList.remove('hidden');
+                } else {
+                    resultadosCierresDiv.classList.add('hidden');
+                }
+            } catch (error) {
+                showToast('Error al consultar cierres.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function exportarCierresPDF() {
+            const fechaInicio = cierresFechaInicioInput.value;
+            const fechaFin = cierresFechaFinInput.value;
+
+            if (!fechaInicio || !fechaFin) {
+                showToast('Por favor, selecciona las fechas de inicio y fin para exportar el PDF.', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const result = await fetchData('generateCierrePDF', { startDate: fechaInicio, endDate: fechaFin });
+                if (result && result.url) {
+                    window.open(result.url, '_blank');
+                    showToast('PDF de cierre generado. Se abrirá en una nueva pestaña.', 'success');
+                } else {
+                    showToast('No se pudo generar el PDF de cierre. Intenta de nuevo.', 'error');
+                }
+            } catch (error) {
+                showToast('Error al generar el PDF de cierre.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function clearCierresForm() {
+            cierresFechaInicioInput.value = '';
+            cierresFechaFinInput.value = '';
+            resultadosCierresDiv.classList.add('hidden');
+        }
+
+        // --- INICIALIZACIÓN Y EVENT LISTENERS ---
+
+        async function updateAllLists() {
+            await renderInventarioList();
+            await renderClientesList();
+        }
+
+        async function initApp() {
+            showLoading(true);
+            // Try to load local data first for immediate display
+            offlineData.clientes = await loadLocalData('clientes') || [];
+            offlineData.inventario = await loadLocalData('inventario') || [];
+            offlineData.transacciones = await loadLocalData('transacciones') || [];
+            
+            // Display local data while syncing
+            onlineData = { ...offlineData }; // Use offline data as initial 'online' data
+            await updateAllLists(); // Render lists based on initial data
+
+            // Then try to synchronize with online data
+            await synchronizeData();
+            
+            appInitialized = true;
+            showLoading(false);
+            document.getElementById('app-content').classList.remove('hidden'); // Hide matrix after actual data load
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', initApp);
+        syncButton.addEventListener('click', synchronizeData);
+
+        // Tab Navigation
+        tabVentas.addEventListener('click', () => showTab('contentVentas'));
+        tabRecibos.addEventListener('click', () => showTab('contentRecibos'));
+        tabMasOpciones.addEventListener('click', () => showTab('contentMasOpciones'));
+
+        // Mas Opciones Sub-navigation
+        btnGoInventario.addEventListener('click', () => showOptionSection('sectionInventario'));
+        btnGoClientes.addEventListener('click', () => showOptionSection('sectionClientes'));
+        btnGoCierres.addEventListener('click', () => showOptionSection('sectionCierres'));
+
+        // Ventas Tab Listeners
+        ventaClienteSearch.addEventListener('input', () => filterClienteSuggestions(ventaClienteSearch, ventaClienteSuggestions, selectVentaCliente));
+        ventaClienteSearch.addEventListener('focus', () => filterClienteSuggestions(ventaClienteSearch, ventaClienteSuggestions, selectVentaCliente));
+        ventaClienteSearch.addEventListener('blur', () => setTimeout(() => ventaClienteSuggestions.classList.add('hidden'), 200)); // Hide after slight delay
+
+        soloPagoACuentaCheckbox.addEventListener('change', () => {
+            if (soloPagoACuentaCheckbox.checked) {
+                productosVentaSection.classList.add('hidden');
+                selectedProducts = {}; // Clear products if switching to payment mode
+                productosSeleccionadosDiv.innerHTML = '';
+            } else {
+                productosVentaSection.classList.remove('hidden');
+            }
+            calculateVentaSummary();
+        });
+        productoSearch.addEventListener('input', filterProductSuggestions);
+        productoSearch.addEventListener('focus', filterProductSuggestions);
+        productoSearch.addEventListener('blur', () => setTimeout(() => productoSuggestions.classList.add('hidden'), 200));
+
+        ventaMontoPagoInput.addEventListener('input', calculateVentaSummary);
+        btnRegistrarVenta.addEventListener('click', registerVenta);
+        btnLimpiarVenta.addEventListener('click', clearVentaForm);
+
+        // Recibos Tab Listeners
+        reciboClienteSearch.addEventListener('input', () => filterClienteSuggestions(reciboClienteSearch, reciboClienteSuggestions, selectReciboCliente));
+        reciboClienteSearch.addEventListener('focus', () => filterClienteSuggestions(reciboClienteSearch, reciboClienteSuggestions, selectReciboCliente));
+        reciboClienteSearch.addEventListener('blur', () => setTimeout(() => reciboClienteSuggestions.classList.add('hidden'), 200));
+
+        btnGenerarReciboTexto.addEventListener('click', () => {
+            if (selectedReciboCliente) {
+                generateAndCopyReceipt(
+                    selectedReciboCliente,
+                    false, // Assuming this button is for general receipts, not just payments
+                    0,0,0,0,{},0
+                    // We might need to fetch a specific transaction ID here for a detailed receipt
+                    // For now, it will just show movements as per current logic
+                );
+            } else {
+                showToast('Selecciona un cliente para generar el recibo.', 'error');
+            }
+        });
+        btnGenerarReciboPDF.addEventListener('click', generatePdfRecibo);
+        copyReceiptButton.addEventListener('click', () => {
+            navigator.clipboard.writeText(receiptTextOutput.textContent).then(() => {
+                showToast('Recibo copiado al portapapeles.', 'success');
+            }).catch(err => {
+                showToast('Error al copiar el recibo.', 'error');
+                console.error('Error al copiar el recibo:', err);
             });
         });
-        
-        notificationOkBtn.addEventListener('click', hideNotification);
-    }
-    
-    // ---- FUNCIONES AUXILIARES ----
-    function normalizeString(str) {
-        if (typeof str !== 'string') return '';
-        return str.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    }
+        closeReceiptModalButton.addEventListener('click', () => receiptModal.classList.add('hidden'));
 
-});
+
+        // Inventario Listeners
+        btnGuardarProducto.addEventListener('click', saveProduct);
+        btnActualizarProducto.addEventListener('click', updateProduct);
+        btnEliminarProducto.addEventListener('click', deleteProduct);
+        btnLimpiarInventario.addEventListener('click', clearInventarioForm);
+
+        // Clientes Listeners
+        btnGuardarCliente.addEventListener('click', saveCliente);
+        btnActualizarCliente.addEventListener('click', updateCliente);
+        btnLimpiarCliente.addEventListener('click', clearClienteForm);
+
+        // Cierres Listeners
+        btnConsultarCierres.addEventListener('click', consultarCierres);
+        btnExportarCierresPDF.addEventListener('click', exportarCierresPDF);
+        btnLimpiarCierres.addEventListener('click', clearCierresForm);
+
+
+        // Offline/Online Status Listener
+        window.addEventListener('online', () => {
+            showToast('Conexión a internet restablecida. Sincronizando datos...', 'info');
+            synchronizeData();
+        });
+        window.addEventListener('offline', () => {
+            showToast('Has perdido la conexión a internet. Funcionando en modo offline.', 'error');
+        });
 
     </script>
 </body>
