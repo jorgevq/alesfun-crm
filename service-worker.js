@@ -1,11 +1,11 @@
-const CACHE_NAME = 'alesfun-crm-cache-v1';
+const CACHE_NAME = 'alesfun-crm-cache-v2'; // Cambiado a v2 para forzar la actualización
 const urlsToCache = [
     '/',
     '/index.html',
     '/manifest.json',
     '/service-worker.js',
-    '/images/icon-192x192.png', // Asegúrate de que estos iconos existan
-    '/images/icon-512x512.png', // Asegúrate de que estos iconos existan
+    '/images/icon-192x192.png', // Asegúrate de que estos iconos existan en la carpeta /images
+    '/images/icon-512x512.png', // Asegúrate de que estos iconos existan en la carpeta /images
     'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css',
     'https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap'
 ];
@@ -20,6 +20,9 @@ self.addEventListener('install', (event) => {
             .then(() => self.skipWaiting()) // Forzamos la activación inmediata del nuevo SW
             .catch(error => {
                 console.error('Service Worker: Fallo al cachear:', error);
+                // Si falla, es probable que un recurso no se encuentre (ej. icono 404).
+                // Continúa la instalación, pero el caché será parcial.
+                // Es crucial que los recursos en urlsToCache existan.
             })
     );
 });
@@ -47,11 +50,8 @@ self.addEventListener('fetch', (event) => {
                 // Si la red falla, no tenemos una copia en caché de la API,
                 // así que solo fallamos o mostramos un mensaje de offline.
                 console.log('Service Worker: Fallo de red para la API, no se puede servir desde caché.');
-                return new Response(JSON.stringify({ status: 'error', message: 'Offline. No se puede acceder a la API.' }), {
-                    headers: { 'Content-Type': 'application/json' },
-                    status: 503,
-                    statusText: 'Service Unavailable'
-                });
+                // No respondemos con un error HTTP si estamos offline para que el frontend maneje la excepción
+                return new Response(null, { status: 503, statusText: 'Service Unavailable - Offline' });
             })
         );
         return;
@@ -69,9 +69,12 @@ self.addEventListener('fetch', (event) => {
                     // Si es una respuesta válida, cachearla
                     if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
                         const responseToCache = networkResponse.clone();
-                        caches.open(CACHE_NAME).then((cache) => {
-                            cache.put(event.request, responseToCache);
-                        });
+                        // Solo cachear si la URL no es la API
+                        if (!event.request.url.startsWith('https://script.google.com/macros/')) {
+                             caches.open(CACHE_NAME).then((cache) => {
+                                 cache.put(event.request, responseToCache);
+                             });
+                        }
                     }
                     return networkResponse;
                 }).catch(() => {
@@ -81,11 +84,10 @@ self.addEventListener('fetch', (event) => {
                         // return caches.match('/offline.html');
                         console.log('Service Worker: Modo offline para navegación, no hay página offline específica.');
                     }
-                    // Si no, simplemente fallar la solicitud
+                    // Si no, simplemente fallar la solicitud (el frontend lo manejará)
                     console.log('Service Worker: Fallo de red para recurso cacheable:', event.request.url);
-                    return new Response('<h1>Estás offline y este recurso no está en caché.</h1>', {
-                        headers: { 'Content-Type': 'text/html' }
-                    });
+                    // Retornar un Response nulo o un error para que la aplicación maneje la caída de red
+                    return new Response(null, { status: 503, statusText: 'Service Unavailable - Offline' });
                 });
             })
     );
