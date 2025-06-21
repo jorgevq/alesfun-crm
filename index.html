@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALESFUN CRM</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0d"/>
+    <link rel="apple-touch-icon" href="images/icon-192x192.png">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- jsPDF para generar PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* Estilo base con tema Matrix/Hacker */
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #0d0d0d;
+            color: #00ff41;
+        }
+        .matrix-bg {
+            background-color: black;
+            overflow: hidden;
+            position: fixed;
+            height: 100%;
+            width: 100%;
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .matrix-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .tab-button {
+            @apply px-4 py-2 border-b-2 font-medium text-lg;
+            border-color: transparent;
+            color: #66c2ff; /* Celeste */
+            transition: all 0.3s ease;
+        }
+        .tab-button.active {
+            color: #00ff41; /* Verde Matrix */
+            border-color: #00aaff; /* Azul */
+        }
+        .input-field {
+            @apply w-full bg-gray-900 border border-blue-700 text-cyan-300 text-lg rounded-md p-2 focus:ring-2 focus:ring-cyan-400 focus:outline-none transition;
+        }
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-blue-900/50 transition duration-300 w-full;
+        }
+        .btn-secondary {
+            @apply bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg shadow-md shadow-gray-900/50 transition duration-300 w-full;
+        }
+        .modal-backdrop {
+            @apply fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50;
+        }
+        .modal-content {
+            @apply bg-gray-900 border-2 border-blue-600 p-6 rounded-xl shadow-2xl shadow-blue-800/50;
+        }
+        /* Ocultar scrollbar */
+        ::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="overscroll-none">
+
+    <!-- PANTALLA DE CARGA MATRIX -->
+    <div id="loading-screen" class="matrix-bg">
+        <canvas id="matrix-canvas" class="matrix-canvas"></canvas>
+        <h1 class="text-4xl z-10 text-cyan-300 animate-pulse">CARGANDO ALESFUN CRM...</h1>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <div id="app-container" class="hidden h-screen flex flex-col max-w-4xl mx-auto p-2 md:p-4">
+        <!-- CABECERA -->
+        <header class="flex justify-between items-center mb-4">
+            <h1 class="text-3xl font-bold text-cyan-400">ALESFUN <span class="text-blue-500">CRM</span></h1>
+            <div class="flex items-center space-x-2">
+                <span id="sync-status" class="text-sm text-gray-400"></span>
+                 <button id="manual-sync" class="text-blue-400 hover:text-cyan-300 transition"><i class="fas fa-sync fa-spin"></i> Sincronizar</button>
+            </div>
+        </header>
+
+        <!-- PESTAÑAS DE NAVEGACIÓN -->
+        <nav class="flex border-b border-blue-800 mb-4">
+            <button class="tab-button active" data-tab="ventas">Ventas</button>
+            <button class="tab-button" data-tab="recibos">Recibos</button>
+            <button class="tab-button" data-tab="mas">Más Opciones</button>
+        </nav>
+
+        <!-- CONTENIDO DE PESTAÑAS -->
+        <main class="flex-grow overflow-y-auto">
+            <!-- PESTAÑA VENTAS -->
+            <div id="tab-ventas" class="tab-content space-y-4">
+                <!-- VENTA FORM -->
+            </div>
+
+            <!-- PESTAÑA RECIBOS -->
+            <div id="tab-recibos" class="tab-content hidden space-y-4">
+                <!-- RECIBOS FORM -->
+            </div>
+
+            <!-- PESTAÑA MÁS OPCIONES -->
+            <div id="tab-mas" class="tab-content hidden space-y-4">
+                 <!-- SUB-TABS -->
+                 <div class="flex border-b border-blue-900 text-sm">
+                    <button class="sub-tab-button active" data-subtab="inventario">Inventario</button>
+                    <button class="sub-tab-button" data-subtab="clientes">Clientes</button>
+                    <button class="sub-tab-button" data-subtab="cierres">Cierres</button>
+                </div>
+                <!-- MAS OPCIONES CONTENT -->
+            </div>
+        </main>
+    </div>
+    
+    <!-- MODAL PARA NOTIFICACIONES -->
+    <div id="notification-modal" class="modal-backdrop hidden">
+        <div class="modal-content text-center w-11/12 md:w-1/3">
+            <p id="notification-message" class="text-lg text-cyan-300 mb-4"></p>
+            <button id="notification-ok" class="btn-primary w-1/2">OK</button>
+        </div>
+    </div>
+
+    <script>
+        // PEGA AQUÍ LA URL DE TU API DE APPS SCRIPT
+        const SCRIPT_URL = 'URL_DE_TU_API_AQUI';
+
+        // Pega aquí el código del archivo app.js
+    </script>
+</body>
+</html>
