@@ -1,484 +1,1629 @@
-// CRM ALESFUN Google Apps Script
-// Código a pegar en Extensiones > Apps Script en tu Google Sheet
-
-function doGet(e) {
-  const action = e.parameter.action;
-  let response = { status: 'error', message: 'Acción no reconocida.' };
-
-  try {
-    switch (action) {
-      case 'getClientes':
-        response = { status: 'success', data: getSheetData('Clientes') };
-        break;
-      case 'getInventario':
-        response = { status: 'success', data: getSheetData('Inventario') };
-        break;
-      case 'getTransacciones':
-        response = { status: 'success', data: getSheetData('Transacciones') };
-        break;
-      case 'generateReciboPDF':
-        const clientId = e.parameter.clientId;
-        const pdfUrl = generateReciboPdf(clientId);
-        if (pdfUrl) {
-          response = { status: 'success', url: pdfUrl };
-        } else {
-          response = { status: 'error', message: 'No se pudo generar el recibo PDF.' };
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALESFUN CRM</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="images/icon-192x192.png">
+    <meta name="theme-color" content="#001a33"/>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0d1a26; /* Darker blue-grey */
+            color: #00e6e6; /* Cyan */
+            font-family: 'Major Mono Display', monospace; /* Hacker/Matrix font */
         }
-        break;
-      case 'getCierreCaja':
-        const startDate = e.parameter.startDate;
-        const endDate = e.parameter.endDate;
-        const cierreData = calculateCierreCaja(startDate, endDate);
-        if (cierreData) {
-          response = { status: 'success', data: cierreData };
-        } else {
-          response = { status: 'error', message: 'No hay datos para el rango de fechas seleccionado.' };
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #0d1a26;
         }
-        break;
-      case 'generateCierrePDF':
-        const start = e.parameter.startDate;
-        const end = e.parameter.endDate;
-        const cierrePdfUrl = generateCierrePdf(start, end);
-        if (cierrePdfUrl) {
-          response = { status: 'success', url: cierrePdfUrl };
-        } else {
-          response = { status: 'error', message: 'No se pudo generar el PDF de cierre.' };
+        .matrix-column {
+            display: flex;
+            flex-direction: column;
+            white-space: pre;
+            opacity: 0.1; /* More subtle */
+            animation: matrix-scroll linear infinite;
         }
-        break;
-      default:
-        response.message = 'Acción GET no válida.';
-        break;
-    }
-  } catch (err) {
-    response = { status: 'error', message: `Error en la operación GET: ${err.message}` };
-    Logger.log(`Error in doGet for action ${action}: ${err.message}, Stack: ${err.stack}`);
-  }
-  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  const action = e.parameter.action;
-  const payload = JSON.parse(e.parameter.payload);
-  let response = { status: 'error', message: 'Acción no reconocida.' };
-
-  try {
-    switch (action) {
-      case 'addProducto':
-        addSheetRow('Inventario', ['ID_PRODUCTO', 'NOMBRE', 'PRECIO', 'STOCK'], payload);
-        response = { status: 'success', message: 'Producto agregado con éxito.' };
-        break;
-      case 'updateProducto':
-        updateSheetRow('Inventario', 'ID_PRODUCTO', payload.ID_PRODUCTO, payload);
-        response = { status: 'success', message: 'Producto actualizado con éxito.' };
-        break;
-      case 'deleteProducto':
-        deleteSheetRow('Inventario', 'ID_PRODUCTO', payload.ID_PRODUCTO);
-        response = { status: 'success', message: 'Producto eliminado con éxito.' };
-        break;
-      case 'addCliente':
-        addSheetRow('Clientes', ['ID_CLIENTE', 'NOMBRE', 'CELULAR', 'DIRECCION', 'CI', 'SALDO_ACTUAL'], payload);
-        response = { status: 'success', message: 'Cliente agregado con éxito.' };
-        break;
-      case 'updateCliente':
-        updateSheetRow('Clientes', 'ID_CLIENTE', payload.ID_CLIENTE, payload);
-        response = { status: 'success', message: 'Cliente actualizado con éxito.' };
-        break;
-      case 'updateClienteSaldo':
-        updateSheetColumn('Clientes', 'ID_CLIENTE', payload.ID_CLIENTE, 'SALDO_ACTUAL', payload.SALDO_ACTUAL);
-        response = { status: 'success', message: 'Saldo del cliente actualizado.' };
-        break;
-      case 'updateProductoStock':
-        updateProductoStock(payload.ID_PRODUCTO, payload.CANTIDAD_VENDIDA); // Special function for stock
-        response = { status: 'success', message: 'Stock del producto actualizado.' };
-        break;
-      case 'addTransaction':
-        addTransaction(payload);
-        response = { status: 'success', message: 'Transacción registrada.' };
-        break;
-      default:
-        response.message = 'Acción POST no válida.';
-        break;
-    }
-  } catch (err) {
-    response = { status: 'error', message: `Error en la operación POST: ${err.message}` };
-    Logger.log(`Error in doPost for action ${action}: ${err.message}, Stack: ${err.stack}`);
-  }
-  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
-}
-
-
-// --- UTILITY FUNCTIONS ---
-function getSheetData(sheetName) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  if (!sheet) {
-    throw new Error(`La hoja "${sheetName}" no existe.`);
-  }
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-
-  if (values.length <= 1) { // Only headers or empty sheet (values will be [[header1, ...]] or [])
-    return []; // Return empty array if no data rows
-  }
-
-  const headers = values[0];
-  const data = [];
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    const rowObject = {};
-    headers.forEach((header, index) => {
-      // Clean up string data: uppercase, no accents
-      let cellValue = row[index];
-      if (typeof cellValue === 'string') {
-        cellValue = cellValue.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      }
-      rowObject[header] = cellValue;
-    });
-    data.push(rowObject);
-  }
-  return data;
-}
-
-function addSheetRow(sheetName, headers, payload) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  const newRow = headers.map(header => {
-    let value = payload[header];
-    // Ensure string values are uppercase and without accents for specified fields
-    if (typeof value === 'string' && (header === 'NOMBRE' || header === 'DIRECCION' || header === 'CI' || header === 'DESCRIPCION' || header === 'TIPO')) {
-      value = value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    }
-    return value;
-  });
-  sheet.appendRow(newRow);
-}
-
-function updateSheetRow(sheetName, idColumn, idValue, payload) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idColIndex = headers.indexOf(idColumn);
-
-  if (idColIndex === -1) throw new Error(`Columna ID '${idColumn}' no encontrada en la hoja '${sheetName}'.`);
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][idColIndex] == idValue) {
-      headers.forEach((header, index) => {
-        if (payload.hasOwnProperty(header)) {
-          let value = payload[header];
-          // Ensure string values are uppercase and without accents for specified fields
-          if (typeof value === 'string' && (header === 'NOMBRE' || header === 'DIRECCION' || header === 'CI' || header === 'DESCRIPCION' || header === 'TIPO')) {
-            value = value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          }
-          sheet.getRange(i + 1, index + 1).setValue(value);
+        .matrix-char {
+            color: #00cc66; /* Green for numbers */
+            font-size: 1.2em;
+            text-shadow: 0 0 5px #00cc66;
         }
-      });
-      return;
-    }
-  }
-  throw new Error(`Registro con ID '${idValue}' no encontrado en la hoja '${sheetName}'.`);
-}
+        @keyframes matrix-scroll {
+            from { transform: translateY(-100%); }
+            to { transform: translateY(100%); }
+        }
+        .tab-button {
+            @apply px-4 py-2 text-lg border-b-2 border-transparent;
+        }
+        .tab-button.active {
+            @apply border-b-2 border-current;
+        }
+        .input-dark {
+            @apply bg-gray-800 text-cyan-400 border border-cyan-700 p-2 rounded focus:ring-2 focus:ring-cyan-500 focus:border-transparent;
+        }
+        .btn-dark {
+            @apply bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded transition duration-300;
+        }
+        .btn-green {
+            @apply bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded transition duration-300;
+        }
+        .btn-red {
+            @apply bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded transition duration-300;
+        }
+        .table-dark th, .table-dark td {
+            @apply border border-cyan-800 px-4 py-2;
+        }
+        .table-dark th {
+            @apply bg-gray-900;
+        }
+        .table-dark tr:nth-child(even) {
+            @apply bg-gray-800;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95); /* Semi-transparent dark overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1000;
+            color: #00e6e6; /* Cyan */
+            font-size: 2em;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .modal-content {
+            background-color: #0d1a26;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px #00e6e6;
+            color: #00e6e6;
+            width: 90%;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body class="p-4">
+    <!-- Matrix Background Animation (Initial Load) -->
+    <div id="matrix-loading-bg" class="matrix-bg"></div>
 
-function updateSheetColumn(sheetName, idColumn, idValue, columnToUpdate, newValue) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idColIndex = headers.indexOf(idColumn);
-  const colToUpdateIndex = headers.indexOf(columnToUpdate);
+    <!-- Main Content -->
+    <div id="app-content" class="hidden">
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-blue-400">ALESFUN CRM</h1>
+            <button id="syncButton" class="text-cyan-400 hover:text-cyan-200 flex items-center btn-dark">
+                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m0 0v5h-.582m15.356-5h.582m-15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m0 0v5h-.582"></path></svg>
+                Sincronizar
+            </button>
+        </header>
 
-  if (idColIndex === -1 || colToUpdateIndex === -1) {
-    throw new Error(`Columnas no encontradas en la hoja '${sheetName}'.`);
-  }
+        <nav class="mb-6 border-b border-cyan-700">
+            <button id="tabVentas" class="tab-button active text-green-400">Ventas</button>
+            <button id="tabRecibos" class="tab-button text-blue-400">Recibos</button>
+            <button id="tabMasOpciones" class="tab-button text-purple-400">Más Opciones</button>
+        </nav>
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][idColIndex] == idValue) {
-      sheet.getRange(i + 1, colToUpdateIndex + 1).setValue(newValue);
-      return;
-    }
-  }
-  throw new Error(`Registro con ID '${idValue}' no encontrado en la hoja '${sheetName}'.`);
-}
+        <!-- Ventas Tab -->
+        <div id="contentVentas" class="tab-content">
+            <h2 class="text-2xl text-green-300 mb-4">Gestión de Ventas / Pagos</h2>
+            <div class="mb-4">
+                <label for="ventaClienteSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Cliente (Nombre/ID):</label>
+                <input type="text" id="ventaClienteSearch" class="input-dark w-full" placeholder="Escribe nombre o ID del cliente">
+                <div id="ventaClienteSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
+            </div>
+            <div class="mb-4 p-4 border border-cyan-800 rounded-lg">
+                <h3 class="text-lg text-cyan-300 mb-2">Datos del Cliente:</h3>
+                <p>ID: <span id="ventaClienteId" class="text-white"></span></p>
+                <p>Nombre: <span id="ventaClienteNombre" class="text-white"></span></p>
+                <p>Saldo Actual: <span id="ventaClienteSaldo" class="text-white"></span></p>
+                <div class="mt-4 flex items-center">
+                    <input type="checkbox" id="soloPagoACuenta" class="form-checkbox h-5 w-5 text-blue-600 bg-gray-700 border-gray-600 rounded">
+                    <label for="soloPagoACuenta" class="ml-2 text-cyan-400">Solo Pago a Cuenta</label>
+                </div>
+            </div>
 
-function deleteSheetRow(sheetName, idColumn, idValue) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idColIndex = headers.indexOf(idColumn);
+            <div id="productosVentaSection">
+                <h3 class="text-lg text-green-300 mb-2">Productos a la Venta:</h3>
+                <div class="mb-4">
+                    <label for="productoSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Producto (Nombre/Código):</label>
+                    <input type="text" id="productoSearch" class="input-dark w-full" placeholder="Escribe nombre o código del producto">
+                    <div id="productoSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
+                </div>
+                <div id="productosSeleccionados" class="mb-4">
+                    <!-- Productos seleccionados se añadirán aquí -->
+                </div>
+            </div>
 
-  if (idColIndex === -1) throw new Error(`Columna ID '${idColumn}' no encontrada en la hoja '${sheetName}'.`);
+            <div class="mb-6 p-4 border border-cyan-800 rounded-lg">
+                <h3 class="text-lg text-yellow-300 mb-2">Resumen de Pago:</h3>
+                <p>Total a Pagar: <span id="ventaTotalPagar" class="text-white font-bold">0.00</span></p>
+                <p>Saldo Pendiente (Venta): <span id="ventaSaldoPendienteVenta" class="text-white">0.00</span></p>
+                <div class="mt-2">
+                    <label for="ventaMontoPago" class="block text-cyan-400 text-sm font-bold mb-2">Monto de Pago:</label>
+                    <input type="number" id="ventaMontoPago" class="input-dark w-full" placeholder="0.00" step="0.01">
+                </div>
+                <p class="mt-2">Cambio: <span id="ventaCambio" class="text-white font-bold">0.00</span></p>
+                <p class="mt-2">Nuevo Saldo del Cliente: <span id="ventaNuevoSaldoCliente" class="text-white font-bold">0.00</span></p>
+            </div>
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][idColIndex] == idValue) {
-      sheet.deleteRow(i + 1);
-      return;
-    }
-  }
-  throw new Error(`Registro con ID '${idValue}' no encontrado en la hoja '${sheetName}'.`);
-}
+            <div class="flex justify-between">
+                <button id="btnRegistrarVenta" class="btn-dark">Registrar Venta/Pago</button>
+                <button id="btnLimpiarVenta" class="btn-red">Limpiar Formulario</button>
+            </div>
+        </div>
 
-function updateProductoStock(productId, quantitySold) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Inventario');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idColIndex = headers.indexOf('ID_PRODUCTO');
-  const stockColIndex = headers.indexOf('STOCK');
+        <!-- Recibos Tab -->
+        <div id="contentRecibos" class="tab-content hidden">
+            <h2 class="text-2xl text-blue-300 mb-4">Generar Recibos</h2>
+            <div class="mb-4">
+                <label for="reciboClienteSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Cliente (Nombre/ID):</label>
+                <input type="text" id="reciboClienteSearch" class="input-dark w-full" placeholder="Escribe nombre o ID del cliente">
+                <div id="reciboClienteSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
+            </div>
+            <div class="mb-4 p-4 border border-cyan-800 rounded-lg">
+                <h3 class="text-lg text-cyan-300 mb-2">Datos del Cliente Seleccionado:</h3>
+                <p>ID: <span id="reciboClienteId" class="text-white"></span></p>
+                <p>Nombre: <span id="reciboClienteNombre" class="text-white"></span></p>
+                <p>Saldo Actual: <span id="reciboClienteSaldo" class="text-white"></span></p>
+            </div>
 
-  if (idColIndex === -1 || stockColIndex === -1) {
-    throw new Error('Columnas ID_PRODUCTO o STOCK no encontradas en la hoja Inventario.');
-  }
+            <div class="flex space-x-4 mb-4">
+                <button id="btnGenerarReciboTexto" class="btn-dark flex-1">Generar Recibo (Texto)</button>
+                <button id="btnGenerarReciboPDF" class="btn-green flex-1">Generar Recibo (PDF)</button>
+            </div>
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][idColIndex] == productId) {
-      let currentStock = parseFloat(data[i][stockColIndex]);
-      let newStock = currentStock - quantitySold;
-      sheet.getRange(i + 1, stockColIndex + 1).setValue(newStock);
-      return;
-    }
-  }
-  throw new Error(`Producto con ID '${productId}' no encontrado en el inventario.`);
-}
+            <div id="ultimosMovimientos" class="mt-6 border border-cyan-800 rounded-lg p-4">
+                <h3 class="text-lg text-yellow-300 mb-2">Últimos 6 Movimientos:</h3>
+                <pre id="reciboMovimientosTexto" class="bg-gray-800 p-3 rounded text-sm overflow-auto max-h-60"></pre>
+                <button id="btnCopiarRecibo" class="btn-dark mt-4 w-full">Copiar Recibo</button>
+            </div>
+        </div>
 
-function addTransaction(payload) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Transacciones');
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        <!-- Mas Opciones Tab -->
+        <div id="contentMasOpciones" class="tab-content hidden">
+            <h2 class="text-2xl text-purple-300 mb-4">Más Opciones</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <button id="btnGoInventario" class="btn-dark">Gestión de Inventario</button>
+                <button id="btnGoClientes" class="btn-dark">Gestión de Clientes</button>
+                <button id="btnGoCierres" class="btn-dark">Cierres de Caja</button>
+            </div>
 
-  // Generate a simple transaction ID based on timestamp
-  const transactionId = `TRX-${Date.now()}`;
-  const now = new Date();
-  const fecha = Utilities.formatDate(now, SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+            <!-- Inventario Section -->
+            <div id="sectionInventario" class="hidden">
+                <h3 class="text-xl text-yellow-300 mb-4">Gestión de Inventario</h3>
+                <div class="mb-4">
+                    <label for="inventarioIdProducto" class="block text-cyan-400 text-sm font-bold mb-2">ID Producto:</label>
+                    <input type="text" id="inventarioIdProducto" class="input-dark w-full" placeholder="ID Único del Producto">
+                </div>
+                <div class="mb-4">
+                    <label for="inventarioNombreProducto" class="block text-cyan-400 text-sm font-bold mb-2">Nombre Producto:</label>
+                    <input type="text" id="inventarioNombreProducto" class="input-dark w-full" placeholder="Nombre del Producto">
+                </div>
+                <div class="mb-4">
+                    <label for="inventarioPrecio" class="block text-cyan-400 text-sm font-bold mb-2">Precio:</label>
+                    <input type="number" id="inventarioPrecio" class="input-dark w-full" step="0.01" placeholder="0.00">
+                </div>
+                <div class="mb-4">
+                    <label for="inventarioStock" class="block text-cyan-400 text-sm font-bold mb-2">Stock:</label>
+                    <input type="number" id="inventarioStock" class="input-dark w-full" step="1" placeholder="0">
+                </div>
+                <div class="flex space-x-4 mb-6">
+                    <button id="btnGuardarProducto" class="btn-dark">Guardar Producto</button>
+                    <button id="btnActualizarProducto" class="btn-green">Actualizar Producto</button>
+                    <button id="btnEliminarProducto" class="btn-red">Eliminar Producto</button>
+                    <button id="btnLimpiarInventario" class="btn-red">Limpiar</button>
+                </div>
 
-  const newRow = headers.map(header => {
-    switch (header) {
-      case 'ID_TRANSACCION': return transactionId;
-      case 'FECHA': return fecha;
-      case 'ID_CLIENTE': return payload.ID_CLIENTE;
-      case 'TIPO': return payload.TIPO;
-      case 'DESCRIPCION': return payload.DESCRIPCION;
-      case 'MONTO': return payload.MONTO_TOTAL_TRANSACCION; // Total value of the transaction (sale value or payment amount)
-      case 'MONTO_RECIBIDO': return payload.MONTO_RECIBIDO; // ACTUAL cash received
-      case 'CAMBIO_DADO': return payload.CAMBIO_DADO; // ACTUAL change given
-      case 'SALDO_ANTERIOR': return payload.SALDO_ANTERIOR;
-      case 'SALDO_NUEVO': return payload.SALDO_NUEVO;
-      default: return '';
-    }
-  });
-  sheet.appendRow(newRow);
-}
+                <h4 class="text-lg text-cyan-300 mb-2">Lista de Productos:</h4>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-gray-900 table-dark">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Precio</th>
+                                <th>Stock</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventarioLista">
+                            <!-- Productos se cargarán aquí -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-function generateReciboPdf(clientId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet();
-  const clientesSheet = sheet.getSheetByName('Clientes');
-  const transaccionesSheet = sheet.getSheetByName('Transacciones');
+            <!-- Clientes Section -->
+            <div id="sectionClientes" class="hidden">
+                <h3 class="text-xl text-yellow-300 mb-4">Gestión de Clientes</h3>
+                <div class="mb-4">
+                    <label for="clienteId" class="block text-cyan-400 text-sm font-bold mb-2">ID Cliente:</label>
+                    <input type="text" id="clienteId" class="input-dark w-full" placeholder="ID Único del Cliente">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteNombre" class="block text-cyan-400 text-sm font-bold mb-2">Nombre:</label>
+                    <input type="text" id="clienteNombre" class="input-dark w-full" placeholder="Nombre Completo">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteCelular" class="block text-cyan-400 text-sm font-bold mb-2">Celular:</label>
+                    <input type="text" id="clienteCelular" class="input-dark w-full" placeholder="Número de Celular">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteDireccion" class="block text-cyan-400 text-sm font-bold mb-2">Dirección:</label>
+                    <input type="text" id="clienteDireccion" class="input-dark w-full" placeholder="Dirección del Cliente">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteCI" class="block text-cyan-400 text-sm font-bold mb-2">CI:</label>
+                    <input type="text" id="clienteCI" class="input-dark w-full" placeholder="Carnet de Identidad">
+                </div>
+                <div class="mb-4">
+                    <label for="clienteSaldoActual" class="block text-cyan-400 text-sm font-bold mb-2">Saldo Actual:</label>
+                    <input type="number" id="clienteSaldoActual" class="input-dark w-full" step="0.01" placeholder="0.00">
+                </div>
+                <div class="flex space-x-4 mb-6">
+                    <button id="btnGuardarCliente" class="btn-dark">Guardar Cliente</button>
+                    <button id="btnActualizarCliente" class="btn-green">Actualizar Cliente</button>
+                    <button id="btnLimpiarCliente" class="btn-red">Limpiar</button>
+                </div>
 
-  const cliente = getSheetData('Clientes').find(c => c.ID_CLIENTE === clientId);
-  if (!cliente) throw new Error('Cliente no encontrado.');
+                <h4 class="text-lg text-cyan-300 mb-2">Lista de Clientes:</h4>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-gray-900 table-dark">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Celular</th>
+                                <th>Saldo</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientesLista">
+                            <!-- Clientes se cargarán aquí -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-  const clientTransactions = getSheetData('Transacciones')
-    .filter(t => t.ID_CLIENTE === clientId)
-    .sort((a, b) => new Date(a.FECHA) - new Date(b.FECHA)); // Ascending for PDF generation
+            <!-- Cierres Section -->
+            <div id="sectionCierres" class="hidden">
+                <h3 class="text-xl text-yellow-300 mb-4">Cierres de Caja</h3>
+                <div class="mb-4">
+                    <label for="cierresFechaInicio" class="block text-cyan-400 text-sm font-bold mb-2">Fecha Inicio:</label>
+                    <input type="date" id="cierresFechaInicio" class="input-dark w-full">
+                </div>
+                <div class="mb-4">
+                    <label for="cierresFechaFin" class="block text-cyan-400 text-sm font-bold mb-2">Fecha Fin:</label>
+                    <input type="date" id="cierresFechaFin" class="input-dark w-full">
+                </div>
+                <div class="flex space-x-4 mb-6">
+                    <button id="btnConsultarCierres" class="btn-dark">Consultar Cierres</button>
+                    <button id="btnExportarCierresPDF" class="btn-green">Exportar PDF</button>
+                    <button id="btnLimpiarCierres" class="btn-red">Limpiar</button>
+                </div>
 
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Recibo de Cliente</title>
-      <style>
-        body { font-family: sans-serif; margin: 20px; color: #333; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #0056b3; }
-        .client-info, .transactions-table { margin-bottom: 20px; border-collapse: collapse; width: 100%; }
-        .client-info td, .transactions-table th, .transactions-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .transactions-table th { background-color: #f2f2f2; }
-        .footer { text-align: center; margin-top: 50px; font-size: 0.9em; color: #777; }
-        .summary { font-weight: bold; margin-top: 20px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>Recibo ALESFUN</h1>
-        <p>Fecha de Emisión: ${new Date().toLocaleDateString('es-ES')}</p>
-      </div>
+                <div id="resultadosCierres" class="mt-6 border border-cyan-800 rounded-lg p-4 hidden">
+                    <h4 class="text-lg text-cyan-300 mb-2">Resultados del Cierre:</h4>
+                    <p>Saldo Inicial: <span id="cierreSaldoInicial" class="text-white">0.00</span></p>
+                    <p>Total Entradas (Recibido en Caja): <span id="cierreTotalEntradas" class="text-white">0.00</span></p>
+                    <p>Total Ventas (Valor de productos): <span id="cierreTotalVentas" class="text-white">0.00</span></p>
+                    <p>Saldo Final: <span id="cierreSaldoFinal" class="text-white font-bold">0.00</span></p>
+                </div>
+            </div>
+        </div>
 
-      <table class="client-info">
-        <tr><td><strong>Cliente ID:</strong> ${cliente.ID_CLIENTE}</td></tr>
-        <tr><td><strong>Nombre:</strong> ${cliente.NOMBRE}</td></tr>
-        <tr><td><strong>Celular:</strong> ${cliente.CELULAR || 'N/A'}</td></tr>
-        <tr><td><strong>Dirección:</strong> ${cliente.DIRECCION || 'N/A'}</td></tr>
-        <tr><td><strong>CI:</strong> ${cliente.CI || 'N/A'}</td></tr>
-        <tr><td><strong>Saldo Actual:</strong> ${parseFloat(cliente.SALDO_ACTUAL).toFixed(2)}</td></tr>
-      </table>
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            Cargando...
+        </div>
 
-      <h2>Historial de Transacciones</h2>
-      <table class="transactions-table">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Tipo</th>
-            <th>Descripción</th>
-            <th>Monto Transacción</th>
-            <th>Monto Recibido</th>
-            <th>Cambio Dado</th>
-            <th>Saldo Anterior</th>
-            <th>Saldo Nuevo</th>
-          </tr>
-        </thead>
-        <tbody>`;
+        <!-- Toast/Notification Area -->
+        <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg transition-all duration-300 opacity-0 z-50">
+            Mensaje aquí
+        </div>
 
-  clientTransactions.forEach(t => {
-    htmlContent += `
-          <tr>
-            <td>${new Date(t.FECHA).toLocaleDateString('es-ES')}</td>
-            <td>${t.TIPO}</td>
-            <td>${t.DESCRIPCION}</td>
-            <td>${parseFloat(t.MONTO || t.MONTO_TOTAL_TRANSACCION).toFixed(2)}</td>
-            <td>${parseFloat(t.MONTO_RECIBIDO || 0).toFixed(2)}</td>
-            <td>${parseFloat(t.CAMBIO_DADO || 0).toFixed(2)}</td>
-            <td>${parseFloat(t.SALDO_ANTERIOR).toFixed(2)}</td>
-            <td>${parseFloat(t.SALDO_NUEVO).toFixed(2)}</td>
-          </tr>`;
-  });
+        <!-- Modal para recibo en PDF o texto -->
+        <div id="receiptModal" class="modal hidden">
+            <div class="modal-content">
+                <h3 class="text-xl mb-4">Recibo Generado</h3>
+                <pre id="receiptTextOutput" class="bg-gray-800 p-3 rounded text-sm overflow-auto max-h-60 text-white"></pre>
+                <div class="flex justify-end mt-4">
+                    <button id="copyReceiptButton" class="btn-dark mr-2">Copiar Recibo</button>
+                    <button id="closeReceiptModalButton" class="btn-red">Cerrar</button>
+                </div>
+            </div>
+        </div>
 
-  htmlContent += `
-        </tbody>
-      </table>
+    </div> <!-- End of app-content -->
 
-      <div class="footer">
-        <p>¡Gracias por tu confianza!</p>
-        <p>ALESFUN CRM</p>
-      </div>
-    </body>
-    </html>
-  `;
+    <script>
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registrado con éxito:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Error al registrar Service Worker:', error);
+                    });
+            });
+        }
 
-  const blob = HtmlService.createHtmlOutput(htmlContent).asBlob().setName(`Recibo_${cliente.NOMBRE}_${clientId}.pdf`);
-  const pdfFolderId = 'TU_ID_DE_CARPETA_DRIVE_AQUI'; // <<< IMPORTANT: Reemplaza con el ID de tu carpeta de Google Drive
-  
-  // Verifica si la carpeta existe. Si no, crea una predeterminada (o lanza un error si es preferible)
-  let folder;
-  try {
-    folder = DriveApp.getFolderById(pdfFolderId);
-  } catch (e) {
-    // Si la carpeta no se encuentra, puedes crear una nueva o usar la carpeta raíz de Drive
-    Logger.log("Folder ID not found, creating a default folder or using root: " + e.message);
-    // Option 1: Create a new folder (e.g., "ALESFUN_PDFs")
-    folder = DriveApp.createFolder("ALESFUN_CRM_PDFs");
-    // Option 2: Use the root folder (less organized)
-    // folder = DriveApp.getRootFolder();
-    
-    // IMPORTANT: If you create a new folder, remember to update `pdfFolderId` with the new ID in your script and redeploy.
-    throw new Error("ID de carpeta de Drive no configurado o inválido. Por favor, actualiza 'pdfFolderId' en el script.");
-  }
+        // MATRIX BACKGROUND ANIMATION (optional, for loading screen)
+        const matrixBg = document.getElementById('matrix-loading-bg');
+        if (matrixBg) {
+            const characters = '0123456789ABCDEF'; // Hex characters for matrix
+            const columnCount = 50; // Adjust for more/fewer columns
+            const charCount = 30; // Adjust for length of columns
 
-  const file = folder.createFile(blob);
-  return file.getUrl();
-}
+            for (let i = 0; i < columnCount; i++) {
+                const column = document.createElement('div');
+                column.classList.add('matrix-column');
+                let columnText = '';
+                for (let j = 0; j < charCount; j++) {
+                    columnText += characters[Math.floor(Math.random() * characters.length)] + '\n';
+                }
+                column.innerHTML = columnText.split('').map(char => `<span class="matrix-char">${char}</span>`).join('');
+                column.style.animationDuration = `${Math.random() * 5 + 5}s`; // Random speed 5-10s
+                column.style.animationDelay = `${Math.random() * -10}s`; // Start at random positions
+                column.style.left = `${(i / columnCount) * 100}%`;
+                matrixBg.appendChild(column);
+            }
+            // Hide matrix after initial load
+            setTimeout(() => {
+                matrixBg.classList.add('hidden');
+                document.getElementById('app-content').classList.remove('hidden');
+            }, 3000); // Hide after 3 seconds for initial effect
+        }
 
-function calculateCierreCaja(startDateStr, endDateStr) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet();
-  const transaccionesSheet = sheet.getSheetByName('Transacciones');
-  const configSheet = sheet.getSheetByName('Config');
 
-  if (!transaccionesSheet || !configSheet) {
-    throw new Error('Las hojas "Transacciones" o "Config" no existen.');
-  }
+        // --- CONFIGURACIÓN Y FUNCIONES GLOBALES ---
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0Eo-hHnvVFESGW8LRVBrFGInzEUa6B8H2QDH4-tvac1OhUNBHxwy33WR8wb9vPIK8/exec';
+        let onlineData = {
+            clientes: [],
+            inventario: [],
+            transacciones: []
+        };
+        let offlineData = {
+            clientes: [],
+            inventario: [],
+            transacciones: []
+        };
+        let appInitialized = false;
 
-  const saldoInicialCaja = parseFloat(configSheet.getRange('B1').getValue());
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            if (type === 'success') {
+                toast.style.backgroundColor = '#10B981'; // Green
+            } else if (type === 'error') {
+                toast.style.backgroundColor = '#EF4444'; // Red
+            } else {
+                toast.style.backgroundColor = '#3B82F6'; // Blue
+            }
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 3000);
+        }
 
-  const allTransactions = getSheetData('Transacciones');
+        function showLoading(show) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (show) {
+                loadingOverlay.classList.remove('hidden');
+            } else {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
 
-  const startDate = new Date(startDateStr);
-  const endDate = new Date(endDateStr);
-  endDate.setHours(23, 59, 59, 999); // Include entire end day
+        // --- FUNCIONES DE INTERACCIÓN CON GOOGLE APPS SCRIPT (API) ---
+        async function fetchData(action, params = {}) {
+            try {
+                if (!navigator.onLine) {
+                    showToast('Estás offline. Los datos mostrados pueden no ser los más recientes.', 'info');
+                    return null; // Don't try to fetch if offline
+                }
+                showLoading(true);
+                const queryParams = new URLSearchParams({ action, ...params }).toString();
+                const response = await fetch(`${SCRIPT_URL}?${queryParams}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                showLoading(false);
+                if (data.status === 'success') {
+                    return data.data;
+                } else {
+                    showToast(`Error de API: ${data.message}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                showLoading(false);
+                showToast(`Error al conectar con el servidor: ${error.message}`, 'error');
+                return null;
+            }
+        }
 
-  let totalEntradasCaja = 0; // Efectivo que entra a la caja (Pagos a cuenta + Efectivo de ventas - Cambio dado)
-  let totalVentasNetas = 0; // Valor total de ventas realizadas (sin considerar pagos)
+        async function postData(action, payload) {
+            try {
+                if (!navigator.onLine) {
+                    showToast('Estás offline. La acción se guardará localmente para sincronizar.', 'info');
+                    await saveOfflineAction({ action, payload });
+                    return { status: 'offline_queued', message: 'Acción guardada para sincronizar offline.' };
+                }
+                showLoading(true);
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({ action, payload: JSON.stringify(payload) }).toString(),
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                showLoading(false);
+                if (data.status === 'success') {
+                    showToast(data.message, 'success');
+                    return data;
+                } else {
+                    showToast(`Error de API: ${data.message}`, 'error');
+                    return null;
+                }
+            } catch (error) {
+                showLoading(false);
+                showToast(`Error al conectar con el servidor: ${error.message}`, 'error');
+                return null;
+            }
+        }
 
-  const relevantTransactions = allTransactions.filter(t => {
-    const transactionDate = new Date(t.FECHA);
-    return transactionDate >= startDate && transactionDate <= endDate;
-  });
+        // --- GESTIÓN DE DATOS OFFLINE (IndexedDB) ---
+        const DB_NAME = 'ALESFUN_CRM_DB';
+        const DB_VERSION = 1;
+        const STORE_NAMES = ['clientes', 'inventario', 'transacciones', 'offline_actions'];
 
-  relevantTransactions.forEach(t => {
-    const montoTotalTransaccion = parseFloat(t.MONTO || t.MONTO_TOTAL_TRANSACCION); // Use MONTO_TOTAL_TRANSACCION if available, fallback to MONTO
-    const montoRecibido = parseFloat(t.MONTO_RECIBIDO || 0);
-    const cambioDado = parseFloat(t.CAMBIO_DADO || 0);
+        function openDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    if (t.TIPO === 'PAGO A CUENTA') {
-      totalEntradasCaja += montoTotalTransaccion; // El MONTO para Pago a Cuenta es el efectivo recibido
-    } else if (t.TIPO === 'VENTA') {
-      totalVentasNetas += montoTotalTransaccion; // El MONTO para VENTA es el valor total de la venta
-      totalEntradasCaja += (montoRecibido - cambioDado); // El efectivo de ventas es (Monto Recibido - Cambio Dado)
-    }
-  });
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    STORE_NAMES.forEach(storeName => {
+                        if (!db.objectStoreNames.contains(storeName)) {
+                            // Key path for 'offline_actions' store is 'id' and auto-increment.
+                            // For others, it's ID_CLIENTE or ID_PRODUCTO.
+                            // Need to handle this more robustly if keyPath can differ per store.
+                            // For now, assuming keyPath can be specified for all but autoIncrement only for offline_actions.
+                            let options = {};
+                            if (storeName === 'offline_actions') {
+                                options = { keyPath: 'id', autoIncrement: true };
+                            } else if (storeName === 'clientes') {
+                                options = { keyPath: 'ID_CLIENTE' };
+                            } else if (storeName === 'inventario') {
+                                options = { keyPath: 'ID_PRODUCTO' };
+                            } else if (storeName === 'transacciones') {
+                                options = { keyPath: 'ID_TRANSACCION' }; // Assuming ID_TRANSACCION will be generated and unique
+                            }
+                            db.createObjectStore(storeName, options);
+                        }
+                    });
+                };
 
-  const saldoFinalCaja = saldoInicialCaja + totalEntradasCaja;
+                request.onsuccess = (event) => {
+                    resolve(event.target.result);
+                };
 
-  return {
-    saldoInicial: saldoInicialCaja,
-    totalEntradas: totalEntradasCaja,
-    totalVentas: totalVentasNetas,
-    saldoFinal: saldoFinalCaja
-  };
-}
+                request.onerror = (event) => {
+                    reject('Error al abrir IndexedDB:', event.target.error);
+                };
+            });
+        }
 
-function generateCierrePdf(startDateStr, endDateStr) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet();
-  const configSheet = sheet.getSheetByName('Config');
+        async function saveLocalData(storeName, data) {
+            const db = await openDatabase();
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            store.clear(); // Clear previous data
+            data.forEach(item => store.put(item)); // Use put to overwrite if key exists
+            await tx.done;
+        }
 
-  if (!configSheet) {
-    throw new Error('La hoja "Config" no existe.');
-  }
+        async function loadLocalData(storeName) {
+            const db = await openDatabase();
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+            const data = await store.getAll();
+            await tx.done;
+            return data;
+        }
 
-  const cierreData = calculateCierreCaja(startDateStr, endDateStr); // Recalculate based on the range
+        async function saveOfflineAction(action) {
+            const db = await openDatabase();
+            const tx = db.transaction('offline_actions', 'readwrite');
+            const store = tx.objectStore('offline_actions');
+            store.add({ id: Date.now(), ...action });
+            await tx.done;
+            showToast('Acción guardada para sincronizar.', 'info');
+        }
 
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Reporte de Cierre de Caja</title>
-      <style>
-        body { font-family: sans-serif; margin: 20px; color: #333; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #0056b3; }
-        .info-table { margin-bottom: 20px; border-collapse: collapse; width: 100%; }
-        .info-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .summary { margin-top: 30px; }
-        .summary p { margin-bottom: 10px; font-size: 1.1em; }
-        .summary .total { font-weight: bold; color: #0056b3; font-size: 1.2em; }
-        .footer { text-align: center; margin-top: 50px; font-size: 0.9em; color: #777; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>Reporte de Cierre de Caja ALESFUN</h1>
-        <p>Periodo: ${new Date(startDateStr).toLocaleDateString('es-ES')} - ${new Date(endDateStr).toLocaleDateString('es-ES')}</p>
-        <p>Generado: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}</p>
-      </div>
+        async function getOfflineActions() {
+            const db = await openDatabase();
+            const tx = db.transaction('offline_actions', 'readonly');
+            const store = tx.objectStore('offline_actions');
+            const actions = await store.getAll();
+            await tx.done;
+            return actions;
+        }
 
-      <table class="info-table">
-        <tr><td><strong>Saldo Inicial de Caja:</strong></td><td>${cierreData.saldoInicial.toFixed(2)}</td></tr>
-        <tr><td><strong>Total Entradas (Recibido):</strong></td><td>${cierreData.totalEntradas.toFixed(2)}</td></tr>
-        <tr><td><strong>Total Ventas (Valor de productos):</strong></td><td>${cierreData.totalVentas.toFixed(2)}</td></tr>
-        <tr><td><strong>Saldo Final de Caja:</strong></td><td>${cierreData.saldoFinal.toFixed(2)}</td></tr>
-      </table>
+        async function clearOfflineActions(ids) {
+            const db = await openDatabase();
+            const tx = db.transaction('offline_actions', 'readwrite');
+            const store = tx.objectStore('offline_actions');
+            for (const id of ids) {
+                store.delete(id);
+            }
+            await tx.done;
+        }
 
-      <div class="footer">
-        <p>Reporte generado por ALESFUN CRM</p>
-      </div>
-    </body>
-    </html>
-  `;
+        async function synchronizeData() {
+            if (!navigator.onLine) {
+                showToast('No hay conexión a internet para sincronizar.', 'error');
+                return;
+            }
+            showLoading(true);
+            showToast('Sincronizando datos...', 'info');
 
-  const blob = HtmlService.createHtmlOutput(htmlContent).asBlob().setName(`Cierre_Caja_${startDateStr}_${endDateStr}.pdf`);
-  const pdfFolderId = 'TU_ID_DE_CARPETA_DRIVE_AQUI'; // <<< IMPORTANT: Reemplaza con el ID de tu carpeta de Google Drive
-  
-  let folder;
-  try {
-    folder = DriveApp.getFolderById(pdfFolderId);
-  } catch (e) {
-    Logger.log("Folder ID not found, creating a default folder or using root: " + e.message);
-    folder = DriveApp.createFolder("ALESFUN_CRM_PDFs");
-    throw new Error("ID de carpeta de Drive no configurado o inválido. Por favor, actualiza 'pdfFolderId' en el script.");
-  }
-  const file = folder.createFile(blob);
-  return file.getUrl();
-}
+            // 1. Enviar acciones offline pendientes
+            const offlineActions = await getOfflineActions();
+            const successfulActionIds = [];
+            for (const action of offlineActions) {
+                try {
+                    const result = await postData(action.action, action.payload);
+                    if (result && result.status === 'success') {
+                        successfulActionIds.push(action.id);
+                    }
+                } catch (error) {
+                    console.error('Error al re-enviar acción offline:', error);
+                }
+            }
+            if (successfulActionIds.length > 0) {
+                await clearOfflineActions(successfulActionIds);
+                showToast(`${successfulActionIds.length} acciones offline sincronizadas.`, 'success');
+            }
 
+            // 2. Descargar todos los datos frescos y actualizar onlineData/localData
+            const fetchedClients = await fetchData('getClientes');
+            const fetchedInventario = await fetchData('getInventario');
+            const fetchedTransacciones = await fetchData('getTransacciones');
+
+            if (fetchedClients && Array.isArray(fetchedClients)) {
+                onlineData.clientes = fetchedClients;
+                await saveLocalData('clientes', fetchedClients);
+            } else {
+                onlineData.clientes = []; // Ensure it's an empty array if fetch fails or returns non-array
+                console.warn('Fetched clients data was not an array or was null/undefined.');
+            }
+            
+            if (fetchedInventario && Array.isArray(fetchedInventario)) {
+                onlineData.inventario = fetchedInventario;
+                await saveLocalData('inventario', fetchedInventario);
+            } else {
+                onlineData.inventario = []; // Ensure it's an empty array
+                console.warn('Fetched inventario data was not an array or was null/undefined.');
+            }
+
+            if (fetchedTransacciones && Array.isArray(fetchedTransacciones)) {
+                onlineData.transacciones = fetchedTransacciones;
+                await saveLocalData('transacciones', fetchedTransacciones);
+            } else {
+                onlineData.transacciones = []; // Ensure it's an empty array
+                console.warn('Fetched transacciones data was not an array or was null/undefined.');
+            }
+
+            // Actualizar la UI con los datos más recientes
+            await updateAllLists();
+            showLoading(false);
+            showToast('Sincronización completa.', 'success');
+        }
+
+        // --- GESTIÓN DE LA UI Y LÓGICA DE LA APLICACIÓN ---
+
+        // Elementos UI principales
+        const tabVentas = document.getElementById('tabVentas');
+        const tabRecibos = document.getElementById('tabRecibos');
+        const tabMasOpciones = document.getElementById('tabMasOpciones');
+
+        const contentVentas = document.getElementById('contentVentas');
+        const contentRecibos = document.getElementById('contentRecibos');
+        const contentMasOpciones = document.getElementById('contentMasOpciones');
+
+        const btnGoInventario = document.getElementById('btnGoInventario');
+        const btnGoClientes = document.getElementById('btnGoClientes');
+        const btnGoCierres = document.getElementById('btnGoCierres');
+
+        const sectionInventario = document.getElementById('sectionInventario');
+        const sectionClientes = document.getElementById('sectionClientes');
+        const sectionCierres = document.getElementById('sectionCierres');
+
+        // Función para cambiar de pestaña
+        function showTab(tabContentId) {
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+            document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+
+            document.getElementById(tabContentId).classList.remove('hidden');
+            if (tabContentId === 'contentVentas') tabVentas.classList.add('active');
+            else if (tabContentId === 'contentRecibos') tabRecibos.classList.add('active');
+            else if (tabContentId === 'contentMasOpciones') tabMasOpciones.classList.add('active');
+
+            // Reset Mas Opciones sections when returning to it
+            if (tabContentId === 'contentMasOpciones') {
+                sectionInventario.classList.add('hidden');
+                sectionClientes.classList.add('hidden');
+                sectionCierres.classList.add('hidden');
+            }
+        }
+
+        // Función para cambiar de sección en "Más Opciones"
+        function showOptionSection(sectionId) {
+            // Hide initial buttons row if entering a sub-section
+            document.querySelectorAll('#contentMasOpciones > div').forEach(section => {
+                if (section.id !== 'sectionInventario' && section.id !== 'sectionClientes' && section.id !== 'sectionCierres') {
+                     // This condition ensures the initial button grid is hidden.
+                     section.classList.add('hidden');
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+            document.getElementById(sectionId).classList.remove('hidden');
+            updateAllLists(); // Refresh lists when entering a section
+        }
+
+        // --- VENTAS ---
+        const ventaClienteSearch = document.getElementById('ventaClienteSearch');
+        const ventaClienteSuggestions = document.getElementById('ventaClienteSuggestions');
+        const ventaClienteIdSpan = document.getElementById('ventaClienteId');
+        const ventaClienteNombreSpan = document.getElementById('ventaClienteNombre');
+        const ventaClienteSaldoSpan = document.getElementById('ventaClienteSaldo');
+        const soloPagoACuentaCheckbox = document.getElementById('soloPagoACuenta');
+        const productosVentaSection = document.getElementById('productosVentaSection');
+        const productoSearch = document.getElementById('productoSearch');
+        const productoSuggestions = document.getElementById('productoSuggestions');
+        const productosSeleccionadosDiv = document.getElementById('productosSeleccionados');
+        const ventaTotalPagarSpan = document.getElementById('ventaTotalPagar');
+        const ventaSaldoPendienteVentaSpan = document.getElementById('ventaSaldoPendienteVenta');
+        const ventaMontoPagoInput = document.getElementById('ventaMontoPago');
+        const ventaCambioSpan = document.getElementById('ventaCambio');
+        const ventaNuevoSaldoClienteSpan = document.getElementById('ventaNuevoSaldoCliente');
+        const btnRegistrarVenta = document.getElementById('btnRegistrarVenta');
+        const btnLimpiarVenta = document.getElementById('btnLimpiarVenta');
+
+        let selectedVentaCliente = null;
+        let selectedProducts = {}; // { ID_PRODUCTO: { productData, cantidad } }
+
+        function formatCurrency(value) {
+            return parseFloat(value).toFixed(2);
+        }
+
+        async function filterClienteSuggestions(inputElement, suggestionsDiv, callback) {
+            const query = inputElement.value.toUpperCase().trim();
+            suggestionsDiv.innerHTML = '';
+            if (query.length < 1) {
+                suggestionsDiv.classList.add('hidden');
+                return;
+            }
+
+            const filteredClientes = (onlineData.clientes || []).filter(c =>
+                c.NOMBRE.includes(query) || (c.ID_CLIENTE && c.ID_CLIENTE.includes(query))
+            ).slice(0, 10); // Limit to 10 suggestions
+
+            if (filteredClientes.length > 0) {
+                suggestionsDiv.classList.remove('hidden');
+                filteredClientes.forEach(cliente => {
+                    const div = document.createElement('div');
+                    div.classList.add('p-2', 'cursor-pointer', 'hover:bg-cyan-700', 'border-b', 'border-cyan-800');
+                    div.textContent = `${cliente.NOMBRE} (ID: ${cliente.ID_CLIENTE || 'N/A'}) - Saldo: ${formatCurrency(cliente.SALDO_ACTUAL)}`;
+                    div.onclick = () => {
+                        inputElement.value = cliente.NOMBRE;
+                        suggestionsDiv.classList.add('hidden');
+                        if (callback) callback(cliente);
+                    };
+                    suggestionsDiv.appendChild(div);
+                });
+            } else {
+                suggestionsDiv.classList.add('hidden');
+            }
+        }
+
+        async function filterProductSuggestions() {
+            const query = productoSearch.value.toUpperCase().trim();
+            productoSuggestions.innerHTML = '';
+            if (query.length < 1) {
+                productoSuggestions.classList.add('hidden');
+                return;
+            }
+
+            const filteredProducts = (onlineData.inventario || []).filter(p =>
+                p.NOMBRE.includes(query) || (p.ID_PRODUCTO && p.ID_PRODUCTO.includes(query))
+            ).slice(0, 10);
+
+            if (filteredProducts.length > 0) {
+                productoSuggestions.classList.remove('hidden');
+                filteredProducts.forEach(product => {
+                    const div = document.createElement('div');
+                    div.classList.add('p-2', 'cursor-pointer', 'hover:bg-cyan-700', 'border-b', 'border-cyan-800');
+                    div.textContent = `${product.NOMBRE} (Cód: ${product.ID_PRODUCTO || 'N/A'}) - Precio: ${formatCurrency(product.PRECIO)} - Stock: ${product.STOCK}`;
+                    div.onclick = () => {
+                        addProductToSale(product);
+                        productoSearch.value = '';
+                        productoSuggestions.classList.add('hidden');
+                    };
+                    productoSuggestions.appendChild(div);
+                });
+            } else {
+                productoSuggestions.classList.add('hidden');
+            }
+        }
+
+        function selectVentaCliente(cliente) {
+            selectedVentaCliente = { ...cliente }; // Clone to avoid direct modification of onlineData
+            ventaClienteIdSpan.textContent = selectedVentaCliente.ID_CLIENTE || 'N/A';
+            ventaClienteNombreSpan.textContent = selectedVentaCliente.NOMBRE;
+            ventaClienteSaldoSpan.textContent = formatCurrency(selectedVentaCliente.SALDO_ACTUAL);
+            calculateVentaSummary(); // Recalculate based on selected client
+        }
+
+        function addProductToSale(product) {
+            if (selectedProducts[product.ID_PRODUCTO]) {
+                selectedProducts[product.ID_PRODUCTO].cantidad++;
+            } else {
+                selectedProducts[product.ID_PRODUCTO] = { ...product, cantidad: 1 };
+            }
+            renderSelectedProducts();
+            calculateVentaSummary();
+        }
+
+        function removeProductFromSale(productId) {
+            delete selectedProducts[productId];
+            renderSelectedProducts();
+            calculateVentaSummary();
+        }
+
+        function renderSelectedProducts() {
+            productosSeleccionadosDiv.innerHTML = '';
+            for (const id in selectedProducts) {
+                const item = selectedProducts[id];
+                const productDiv = document.createElement('div');
+                productDiv.classList.add('flex', 'items-center', 'justify-between', 'bg-gray-800', 'p-2', 'rounded', 'mb-2');
+                productDiv.innerHTML = `
+                    <span class="flex-1">${item.NOMBRE} (Cód: ${item.ID_PRODUCTO})</span>
+                    <input type="number" value="${item.cantidad}" min="1" class="input-dark w-20 mx-2 text-center"
+                           onchange="updateProductQuantity('${item.ID_PRODUCTO}', this.value)">
+                    <input type="number" value="${formatCurrency(item.PRECIO)}" step="0.01" class="input-dark w-24 mx-2 text-center"
+                           onchange="updateProductPrice('${item.ID_PRODUCTO}', this.value)">
+                    <span class="w-20 text-right">Total: ${formatCurrency(item.cantidad * item.PRECIO)}</span>
+                    <button class="btn-red ml-2 p-1 text-sm" onclick="removeProductFromSale('${item.ID_PRODUCTO}')">X</button>
+                `;
+                productosSeleccionadosDiv.appendChild(productDiv);
+            }
+        }
+
+        function updateProductQuantity(productId, quantity) {
+            quantity = parseInt(quantity);
+            if (quantity > 0 && selectedProducts[productId]) {
+                selectedProducts[productId].cantidad = quantity;
+                renderSelectedProducts(); // Re-render to update total for item
+                calculateVentaSummary();
+            }
+        }
+
+        function updateProductPrice(productId, price) {
+            price = parseFloat(price);
+            if (price >= 0 && selectedProducts[productId]) {
+                selectedProducts[productId].PRECIO = price;
+                renderSelectedProducts(); // Re-render to update total for item
+                calculateVentaSummary();
+            }
+        }
+
+        function calculateVentaSummary() {
+            let totalVentaValue = 0; // Value of products/services
+            if (!soloPagoACuentaCheckbox.checked) {
+                for (const id in selectedProducts) {
+                    const item = selectedProducts[id];
+                    totalVentaValue += item.cantidad * item.PRECIO;
+                }
+            }
+
+            const montoPago = parseFloat(ventaMontoPagoInput.value) || 0;
+            const clienteSaldoActual = parseFloat(selectedVentaCliente ? selectedVentaCliente.SALDO_ACTUAL : 0);
+
+            let saldoPendienteVentaDisplay = 0; // Display for this specific sale
+            let nuevoSaldoCliente = clienteSaldoActual;
+            let cambio = 0;
+
+            if (soloPagoACuentaCheckbox.checked) {
+                // Pago a cuenta
+                if (montoPago > 0) {
+                     nuevoSaldoCliente = clienteSaldoActual - montoPago;
+                     // Si el pago excede el saldo negativo (deuda), el saldo debe ir a cero, el exceso es cambio.
+                     if (clienteSaldoActual < 0 && nuevoSaldoCliente > 0) {
+                         cambio = nuevoSaldoCliente;
+                         nuevoSaldoCliente = 0;
+                     } else if (clienteSaldoActual >= 0 && nuevoSaldoCliente < 0) {
+                         // Si el cliente no tiene deuda y paga, esto es un error o anticipo.
+                         // Por la lógica del prompt, si paga "más" de lo que debe (o si es 0), es cambio.
+                         cambio = montoPago;
+                         nuevoSaldoCliente = clienteSaldoActual;
+                     }
+                } else { // MontoPago <= 0
+                    nuevoSaldoCliente = clienteSaldoActual;
+                    cambio = 0;
+                }
+                saldoPendienteVentaDisplay = 0; // No sale, so no sale pending
+            } else { // Es una venta de productos
+                saldoPendienteVentaDisplay = totalVentaValue - montoPago;
+                if (saldoPendienteVentaDisplay < 0) { // Si se pagó más que el total de la venta
+                    cambio = Math.abs(saldoPendienteVentaDisplay);
+                    saldoPendienteVentaDisplay = 0; // No hay saldo pendiente de esta venta
+                    nuevoSaldoCliente = clienteSaldoActual; // El cambio no afecta el saldo global del cliente
+                } else { // Si se pagó menos o exactamente el total de la venta
+                    nuevoSaldoCliente = clienteSaldoActual + saldoPendienteVentaDisplay; // Agrega el saldo pendiente de la venta al saldo del cliente
+                    cambio = 0;
+                }
+            }
+            
+            // Asegurarse de que el saldo final no sea negativo si no lo era antes y se pagó de más.
+            // O si era negativo y se cubrió la deuda con exceso, el exceso es cambio y el saldo es 0.
+            if (nuevoSaldoCliente < 0 && clienteSaldoActual >= 0 && !soloPagoACuentaCheckbox.checked) {
+                 // This means new debt was created, which is fine
+            } else if (nuevoSaldoCliente < 0 && !soloPagoACuentaCheckbox.checked && totalVentaValue <= montoPago) {
+                // If a sale was fully paid or overpaid, balance should not go negative.
+                // The excess is handled as 'cambio'.
+                nuevoSaldoCliente = clienteSaldoActual; // Saldo no cambia por overpayment
+            } else if (nuevoSaldoCliente < 0 && soloPagoACuentaCheckbox.checked && montoPago > Math.abs(clienteSaldoActual)) {
+                // If payment for debt exceeds debt, balance should go to 0.
+                nuevoSaldoCliente = 0;
+            }
+
+
+            ventaTotalPagarSpan.textContent = formatCurrency(totalVentaValue);
+            ventaSaldoPendienteVentaSpan.textContent = formatCurrency(saldoPendienteVentaDisplay);
+            ventaCambioSpan.textContent = formatCurrency(cambio);
+            ventaNuevoSaldoClienteSpan.textContent = formatCurrency(nuevoSaldoCliente);
+        }
+
+        async function registerVenta() {
+            if (!selectedVentaCliente) {
+                showToast('Por favor, selecciona un cliente primero.', 'error');
+                return;
+            }
+
+            const isPagoACuenta = soloPagoACuentaCheckbox.checked;
+            const montoPagoInput = parseFloat(ventaMontoPagoInput.value) || 0; // Amount client pays
+            const clienteId = selectedVentaCliente.ID_CLIENTE;
+            const clienteSaldoActual = parseFloat(selectedVentaCliente.SALDO_ACTUAL);
+
+            let totalVentaValue = 0; // Total value of goods/service or exact payment amount for PAGO A CUENTA
+            let transactionDescription = '';
+            let transactionType = '';
+            let actualCashReceived = 0; // Actual money that goes into the cash register
+            let changeGiven = 0; // Change given to client
+
+            let finalClientSaldo = clienteSaldoActual; // Will be calculated below
+
+            if (isPagoACuenta) {
+                if (montoPagoInput <= 0) {
+                    showToast('Para pago a cuenta, el monto debe ser mayor a 0.', 'error');
+                    return;
+                }
+                transactionType = 'PAGO A CUENTA';
+                transactionDescription = 'PAGO A CUENTA';
+                totalVentaValue = montoPagoInput; // For PAGO A CUENTA, the "value" of transaction is the payment
+                actualCashReceived = montoPagoInput; // All payment goes to cash
+                
+                finalClientSaldo = clienteSaldoActual - montoPagoInput;
+                if (clienteSaldoActual < 0 && finalClientSaldo > 0) { // If client had debt and paid more than debt
+                    changeGiven = finalClientSaldo;
+                    finalClientSaldo = 0;
+                } else if (clienteSaldoActual >= 0 && finalClientSaldo < 0) { // If client had no debt and made a payment (overpayment)
+                    changeGiven = montoPagoInput; // This is all change
+                    finalClientSaldo = clienteSaldoActual; // Balance remains unchanged (or becomes 0)
+                }
+                 // Ensure finalClientSaldo is not negative if it was 0 and overpaid
+                if (clienteSaldoActual >= 0 && finalClientSaldo < 0) {
+                    finalClientSaldo = clienteSaldoActual;
+                }
+
+
+            } else { // Es una venta de productos
+                if (Object.keys(selectedProducts).length === 0) {
+                    showToast('Por favor, añade productos a la venta.', 'error');
+                    return;
+                }
+
+                totalVentaValue = Object.values(selectedProducts).reduce((sum, item) => sum + (item.cantidad * item.PRECIO), 0);
+                transactionType = 'VENTA';
+                transactionDescription = Object.values(selectedProducts).map(p => `${p.NOMBRE} x${p.cantidad} @${formatCurrency(p.PRECIO)}`).join('; ');
+                
+                actualCashReceived = montoPagoInput;
+                changeGiven = Math.max(0, montoPagoInput - totalVentaValue); // Calculate change
+
+                let currentSalePending = totalVentaValue - (montoPagoInput - changeGiven); // What is still owed for this sale (if any)
+                finalClientSaldo = clienteSaldoActual + currentSalePending;
+
+                // If sale was fully paid or overpaid, balance should not change based on overpayment.
+                if (currentSalePending <= 0) {
+                    finalClientSaldo = clienteSaldoActual;
+                }
+
+                // Update stock locally for immediate UI feedback
+                for (const productId in selectedProducts) {
+                    const soldItem = selectedProducts[productId];
+                    const inventoryItem = onlineData.inventario.find(i => i.ID_PRODUCTO === productId);
+                    if (inventoryItem) {
+                        inventoryItem.STOCK -= soldItem.cantidad;
+                    }
+                }
+            }
+            
+            // Final adjustment for saldo cliente, ensuring it doesn't go below 0 unless it's actual debt.
+            finalClientSaldo = parseFloat(finalClientSaldo.toFixed(2));
+            if (finalClientSaldo < 0 && clienteSaldoActual >= 0 && !isPagoACuenta && totalVentaValue > montoPagoInput) {
+                // This means new debt was created, which is fine
+            }
+
+
+            const initialClientSaldo = clienteSaldoActual; // Saldo antes de esta transacción
+
+            showLoading(true);
+            try {
+                // Register sale/payment
+                const result = await postData('addTransaction', {
+                    ID_CLIENTE: clienteId,
+                    TIPO: transactionType,
+                    DESCRIPCION: transactionDescription,
+                    MONTO: totalVentaValue, // MONTO column in sheet for total value of transaction (sale value or payment amount)
+                    MONTO_RECIBIDO: actualCashReceived, // NEW: actual cash received
+                    CAMBIO_DADO: changeGiven, // NEW: actual change given
+                    SALDO_ANTERIOR: initialClientSaldo,
+                    SALDO_NUEVO: finalClientSaldo
+                });
+
+                if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                    // Update client balance in DB if online
+                    await postData('updateClienteSaldo', {
+                        ID_CLIENTE: clienteId,
+                        SALDO_ACTUAL: finalClientSaldo
+                    });
+
+                    // Update stock in DB if online
+                    if (!isPagoACuenta) {
+                        for (const productId in selectedProducts) {
+                            const soldItem = selectedProducts[productId];
+                            await postData('updateProductoStock', {
+                                ID_PRODUCTO: productId,
+                                CANTIDAD_VENDIDA: soldItem.cantidad // Send quantity sold, not final stock
+                            });
+                        }
+                    }
+
+                    showToast(result.message, 'success');
+                    await synchronizeData(); // Re-sync all data after successful transaction/queue
+                    // Generate and copy receipt automatically
+                    generateAndCopyReceipt(
+                        selectedVentaCliente,
+                        isPagoACuenta,
+                        totalVentaValue,
+                        actualCashReceived,
+                        changeGiven,
+                        initialClientSaldo,
+                        finalClientSaldo,
+                        selectedProducts
+                    );
+                    clearVentaForm();
+                }
+            } catch (error) {
+                showToast(`Error al registrar: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function clearVentaForm() {
+            ventaClienteSearch.value = '';
+            ventaClienteIdSpan.textContent = '';
+            ventaClienteNombreSpan.textContent = '';
+            ventaClienteSaldoSpan.textContent = '';
+            selectedVentaCliente = null;
+            soloPagoACuentaCheckbox.checked = false;
+            productosVentaSection.classList.remove('hidden'); // Ensure products section is visible by default
+            productoSearch.value = '';
+            productosSeleccionadosDiv.innerHTML = '';
+            selectedProducts = {};
+            ventaMontoPagoInput.value = '';
+            calculateVentaSummary(); // Reset summary values to 0
+        }
+
+        // --- RECIBOS ---
+        const reciboClienteSearch = document.getElementById('reciboClienteSearch');
+        const reciboClienteSuggestions = document.getElementById('reciboClienteSuggestions');
+        const reciboClienteIdSpan = document.getElementById('reciboClienteId');
+        const reciboClienteNombreSpan = document.getElementById('reciboClienteNombre');
+        const reciboClienteSaldoSpan = document.getElementById('reciboClienteSaldo');
+        const btnGenerarReciboTexto = document.getElementById('btnGenerarReciboTexto');
+        const btnGenerarReciboPDF = document.getElementById('btnGenerarReciboPDF');
+        const reciboMovimientosTexto = document.getElementById('reciboMovimientosTexto');
+        const btnCopiarRecibo = document.getElementById('btnCopiarRecibo');
+        const receiptModal = document.getElementById('receiptModal');
+        const receiptTextOutput = document.getElementById('receiptTextOutput');
+        const copyReceiptButton = document.getElementById('copyReceiptButton');
+        const closeReceiptModalButton = document.getElementById('closeReceiptModalButton');
+
+
+        let selectedReciboCliente = null;
+
+        function selectReciboCliente(cliente) {
+            selectedReciboCliente = { ...cliente };
+            reciboClienteIdSpan.textContent = selectedReciboCliente.ID_CLIENTE || 'N/A';
+            reciboClienteNombreSpan.textContent = selectedReciboCliente.NOMBRE;
+            reciboClienteSaldoSpan.textContent = formatCurrency(selectedReciboCliente.SALDO_ACTUAL);
+            loadClientMovements(selectedReciboCliente.ID_CLIENTE);
+        }
+
+        async function loadClientMovements(clientId) {
+            reciboMovimientosTexto.textContent = 'Cargando movimientos...';
+            // Use onlineData for movements, which is always updated after sync
+            const clientTransactions = (onlineData.transacciones || [])
+                .filter(t => t.ID_CLIENTE === clientId)
+                .sort((a, b) => new Date(b.FECHA) - new Date(a.FECHA)) // Sort by date descending
+                .slice(0, 6); // Get last 6
+
+            let movementsText = '--- Últimos Movimientos ---\n\n';
+            if (clientTransactions.length === 0) {
+                movementsText += 'No hay movimientos recientes para este cliente.';
+            } else {
+                clientTransactions.forEach(t => {
+                    const fecha = new Date(t.FECHA).toLocaleDateString('es-ES');
+                    const tipo = t.TIPO;
+                    const descripcion = t.DESCRIPCION.length > 50 ? t.DESCRIPCION.substring(0, 50) + '...' : t.DESCRIPCION;
+                    const montoTransaccion = parseFloat(t.MONTO || 0).toFixed(2);
+                    const montoRecibido = parseFloat(t.MONTO_RECIBIDO || 0).toFixed(2);
+                    const cambioDado = parseFloat(t.CAMBIO_DADO || 0).toFixed(2);
+                    const saldoAnterior = parseFloat(t.SALDO_ANTERIOR).toFixed(2);
+                    const saldoNuevo = parseFloat(t.SALDO_NUEVO).toFixed(2);
+
+                    movementsText += `Fecha: ${fecha}\n`;
+                    movementsText += `Tipo: ${tipo}\n`;
+                    movementsText += `Descripción: ${descripcion}\n`;
+                    movementsText += `Monto Transacción: ${montoTransaccion}\n`;
+                    movementsText += `Monto Recibido: ${montoRecibido}\n`;
+                    movementsText += `Cambio Dado: ${cambioDado}\n`;
+                    movementsText += `Saldo Ant: ${saldoAnterior}\n`;
+                    movementsText += `Saldo Act: ${saldoNuevo}\n`;
+                    movementsText += `--------------------------\n`;
+                });
+            }
+            reciboMovimientosTexto.textContent = movementsText;
+        }
+
+        function generateAndCopyReceipt(cliente, isPagoACuenta, totalVentaValue, actualCashReceived, changeGiven, saldoAnt, saldoActual, productsSold) {
+            const now = new Date();
+            const date = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const time = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+            let receipt = `--- RECIBO ALESFUN ---\n`;
+            receipt += `Fecha: ${date} ${time}\n`;
+            receipt += `Cliente: ${cliente.NOMBRE} (ID: ${cliente.ID_CLIENTE})\n`;
+            receipt += `--------------------------\n`;
+
+            if (isPagoACuenta) {
+                receipt += `Tipo: PAGO A CUENTA\n`;
+                receipt += `Monto Pagado: ${formatCurrency(actualCashReceived)}\n`;
+                receipt += `Saldo Anterior: ${formatCurrency(saldoAnt)}\n`;
+                receipt += `Nuevo Saldo: ${formatCurrency(saldoActual)}\n`;
+            } else {
+                receipt += `Tipo: VENTA\n`;
+                receipt += `Productos:\n`;
+                for (const id in productsSold) {
+                    const item = productsSold[id];
+                    receipt += `  - ${item.NOMBRE} x${item.cantidad} @${formatCurrency(item.PRECIO)} = ${formatCurrency(item.cantidad * item.PRECIO)}\n`;
+                }
+                receipt += `Total Venta: ${formatCurrency(totalVentaValue)}\n`;
+                receipt += `Monto Recibido: ${formatCurrency(actualCashReceived)}\n`;
+                if (changeGiven > 0) {
+                    receipt += `Cambio: ${formatCurrency(changeGiven)}\n`;
+                }
+                receipt += `Saldo Anterior Cliente: ${formatCurrency(saldoAnt)}\n`;
+                const saldoPendienteVenta = Math.max(0, totalVentaValue - (actualCashReceived - changeGiven)); // Correct remaining debt
+                receipt += `Saldo Pendiente Venta (Cliente): ${formatCurrency(saldoPendienteVenta)}\n`;
+                receipt += `Nuevo Saldo Cliente: ${formatCurrency(saldoActual)}\n`;
+            }
+            receipt += `--------------------------\n`;
+            receipt += `¡Gracias por tu compra/pago!\n`;
+
+            receiptTextOutput.textContent = receipt;
+            receiptModal.classList.remove('hidden');
+
+            // Automatically copy to clipboard
+            navigator.clipboard.writeText(receipt).then(() => {
+                // showToast('Recibo copiado al portapapeles automáticamente.', 'success'); // Remove this to avoid double toast
+            }).catch(err => {
+                showToast('Error al copiar el recibo.', 'error');
+                console.error('Error al copiar el recibo:', err);
+            });
+        }
+
+        async function generatePdfRecibo() {
+            if (!selectedReciboCliente) {
+                showToast('Por favor, selecciona un cliente para generar el recibo.', 'error');
+                return;
+            }
+            showLoading(true);
+            try {
+                const result = await fetchData('generateReciboPDF', { clientId: selectedReciboCliente.ID_CLIENTE });
+                if (result && result.url) {
+                    window.open(result.url, '_blank');
+                    showToast('PDF generado. Se abrirá en una nueva pestaña.', 'success');
+                } else {
+                    showToast('No se pudo generar el PDF. Intenta de nuevo.', 'error');
+                }
+            } catch (error) {
+                showToast('Error al generar el PDF.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+
+        // --- MAS OPCIONES: INVENTARIO ---
+        const inventarioIdProductoInput = document.getElementById('inventarioIdProducto');
+        const inventarioNombreProductoInput = document.getElementById('inventarioNombreProducto');
+        const inventarioPrecioInput = document.getElementById('inventarioPrecio');
+        const inventarioStockInput = document.getElementById('inventarioStock');
+        const btnGuardarProducto = document.getElementById('btnGuardarProducto');
+        const btnActualizarProducto = document.getElementById('btnActualizarProducto');
+        const btnEliminarProducto = document.getElementById('btnEliminarProducto');
+        const btnLimpiarInventario = document.getElementById('btnLimpiarInventario');
+        const inventarioListaBody = document.getElementById('inventarioLista');
+
+        async function renderInventarioList() {
+            inventarioListaBody.innerHTML = '';
+            // Ensure onlineData.inventario is an array before calling forEach
+            if (Array.isArray(onlineData.inventario)) {
+                onlineData.inventario.forEach(product => {
+                    const row = inventarioListaBody.insertRow();
+                    row.innerHTML = `
+                        <td>${product.ID_PRODUCTO}</td>
+                        <td>${product.NOMBRE}</td>
+                        <td>${formatCurrency(product.PRECIO)}</td>
+                        <td>${product.STOCK}</td>
+                        <td>
+                            <button class="btn-dark p-1 text-sm" onclick="editProduct('${product.ID_PRODUCTO}')">Editar</button>
+                        </td>
+                    `;
+                });
+            } else {
+                console.warn('onlineData.inventario no es un array. No se pudo renderizar la lista de inventario.');
+            }
+        }
+
+        function editProduct(productId) {
+            const product = (onlineData.inventario || []).find(p => p.ID_PRODUCTO === productId);
+            if (product) {
+                inventarioIdProductoInput.value = product.ID_PRODUCTO;
+                inventarioNombreProductoInput.value = product.NOMBRE;
+                inventarioPrecioInput.value = product.PRECIO;
+                inventarioStockInput.value = product.STOCK;
+            }
+        }
+
+        async function saveProduct() {
+            const id = inventarioIdProductoInput.value.toUpperCase().trim();
+            const nombre = inventarioNombreProductoInput.value.toUpperCase().trim();
+            const precio = parseFloat(inventarioPrecioInput.value) || 0;
+            const stock = parseInt(inventarioStockInput.value) || 0;
+
+            if (!id || !nombre || precio <= 0 || stock < 0) {
+                showToast('Por favor, completa todos los campos de producto correctamente (ID, Nombre, Precio > 0, Stock >= 0).', 'error');
+                return;
+            }
+
+            const existingProduct = (onlineData.inventario || []).find(p => p.ID_PRODUCTO === id);
+            if (existingProduct) {
+                showToast('Ya existe un producto con este ID. Usa "Actualizar" si quieres modificarlo.', 'error');
+                return;
+            }
+
+            const result = await postData('addProducto', { ID_PRODUCTO: id, NOMBRE: nombre, PRECIO: precio, STOCK: stock });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearInventarioForm();
+            }
+        }
+
+        async function updateProduct() {
+            const id = inventarioIdProductoInput.value.toUpperCase().trim();
+            const nombre = inventarioNombreProductoInput.value.toUpperCase().trim();
+            const precio = parseFloat(inventarioPrecioInput.value) || 0;
+            const stock = parseInt(inventarioStockInput.value) || 0;
+
+            if (!id || !nombre || precio <= 0 || stock < 0) {
+                showToast('Por favor, completa todos los campos de producto correctamente (ID, Nombre, Precio > 0, Stock >= 0).', 'error');
+                return;
+            }
+
+            const existingProduct = (onlineData.inventario || []).find(p => p.ID_PRODUCTO === id);
+            if (!existingProduct) {
+                showToast('No se encontró un producto con este ID para actualizar.', 'error');
+                return;
+            }
+
+            const result = await postData('updateProducto', { ID_PRODUCTO: id, NOMBRE: nombre, PRECIO: precio, STOCK: stock });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearInventarioForm();
+            }
+        }
+
+        async function deleteProduct() {
+            const id = inventarioIdProductoInput.value.toUpperCase().trim();
+            if (!id) {
+                showToast('Por favor, ingresa el ID del producto a eliminar.', 'error');
+                return;
+            }
+
+            const confirmDelete = confirm(`¿Estás seguro de que quieres eliminar el producto con ID: ${id}?`);
+            if (!confirmDelete) return;
+
+            const result = await postData('deleteProducto', { ID_PRODUCTO: id });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearInventarioForm();
+            }
+        }
+
+        function clearInventarioForm() {
+            inventarioIdProductoInput.value = '';
+            inventarioNombreProductoInput.value = '';
+            inventarioPrecioInput.value = '';
+            inventarioStockInput.value = '';
+        }
+
+        // --- MAS OPCIONES: CLIENTES ---
+        const clienteIdInput = document.getElementById('clienteId');
+        const clienteNombreInput = document.getElementById('clienteNombre');
+        const clienteCelularInput = document.getElementById('clienteCelular');
+        const clienteDireccionInput = document.getElementById('clienteDireccion');
+        const clienteCIInput = document.getElementById('clienteCI');
+        const clienteSaldoActualInput = document.getElementById('clienteSaldoActual');
+        const btnGuardarCliente = document.getElementById('btnGuardarCliente');
+        const btnActualizarCliente = document.getElementById('btnActualizarCliente');
+        const btnLimpiarCliente = document.getElementById('btnLimpiarCliente');
+        const clientesListaBody = document.getElementById('clientesLista');
+
+        async function renderClientesList() {
+            clientesListaBody.innerHTML = '';
+            // Ensure onlineData.clientes is an array before calling forEach
+            if (Array.isArray(onlineData.clientes)) {
+                onlineData.clientes.forEach(cliente => {
+                    const row = clientesListaBody.insertRow();
+                    row.innerHTML = `
+                        <td>${cliente.ID_CLIENTE || 'N/A'}</td>
+                        <td>${cliente.NOMBRE}</td>
+                        <td>${cliente.CELULAR || 'N/A'}</td>
+                        <td>${formatCurrency(cliente.SALDO_ACTUAL)}</td>
+                        <td>
+                            <button class="btn-dark p-1 text-sm" onclick="editCliente('${cliente.ID_CLIENTE}')">Editar</button>
+                        </td>
+                    `;
+                });
+            } else {
+                console.warn('onlineData.clientes no es un array. No se pudo renderizar la lista de clientes.');
+            }
+        }
+
+        function editCliente(clientId) {
+            const cliente = (onlineData.clientes || []).find(c => c.ID_CLIENTE === clientId);
+            if (cliente) {
+                clienteIdInput.value = cliente.ID_CLIENTE;
+                clienteNombreInput.value = cliente.NOMBRE;
+                clienteCelularInput.value = cliente.CELULAR;
+                clienteDireccionInput.value = cliente.DIRECCION;
+                clienteCIInput.value = cliente.CI;
+                clienteSaldoActualInput.value = cliente.SALDO_ACTUAL;
+            }
+        }
+
+        async function saveCliente() {
+            const id = clienteIdInput.value.toUpperCase().trim();
+            const nombre = clienteNombreInput.value.toUpperCase().trim();
+            const celular = clienteCelularInput.value.trim();
+            const direccion = clienteDireccionInput.value.toUpperCase().trim();
+            const ci = clienteCIInput.value.toUpperCase().trim();
+            const saldo = parseFloat(clienteSaldoActualInput.value) || 0;
+
+            if (!id || !nombre) {
+                showToast('Por favor, completa el ID y el Nombre del cliente.', 'error');
+                return;
+            }
+
+            const existingCliente = (onlineData.clientes || []).find(c => c.ID_CLIENTE === id);
+            if (existingCliente) {
+                showToast('Ya existe un cliente con este ID. Usa "Actualizar" si quieres modificarlo.', 'error');
+                return;
+            }
+
+            const result = await postData('addCliente', { ID_CLIENTE: id, NOMBRE: nombre, CELULAR: celular, DIRECCION: direccion, CI: ci, SALDO_ACTUAL: saldo });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearClienteForm();
+            }
+        }
+
+        async function updateCliente() {
+            const id = clienteIdInput.value.toUpperCase().trim();
+            const nombre = clienteNombreInput.value.toUpperCase().trim();
+            const celular = clienteCelularInput.value.trim();
+            const direccion = clienteDireccionInput.value.toUpperCase().trim();
+            const ci = clienteCIInput.value.toUpperCase().trim();
+            const saldo = parseFloat(clienteSaldoActualInput.value) || 0;
+
+            if (!id || !nombre) {
+                showToast('Por favor, completa el ID y el Nombre del cliente.', 'error');
+                return;
+            }
+
+            const existingCliente = (onlineData.clientes || []).find(c => c.ID_CLIENTE === id);
+            if (!existingCliente) {
+                showToast('No se encontró un cliente con este ID para actualizar.', 'error');
+                return;
+            }
+
+            const result = await postData('updateCliente', { ID_CLIENTE: id, NOMBRE: nombre, CELULAR: celular, DIRECCION: direccion, CI: ci, SALDO_ACTUAL: saldo });
+            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+                await synchronizeData();
+                clearClienteForm();
+            }
+        }
+
+        function clearClienteForm() {
+            clienteIdInput.value = '';
+            clienteNombreInput.value = '';
+            clienteCelularInput.value = '';
+            clienteDireccionInput.value = '';
+            clienteCIInput.value = '';
+            clienteSaldoActualInput.value = '0.00';
+        }
+
+        // --- MAS OPCIONES: CIERRES ---
+        const cierresFechaInicioInput = document.getElementById('cierresFechaInicio');
+        const cierresFechaFinInput = document.getElementById('cierresFechaFin');
+        const btnConsultarCierres = document.getElementById('btnConsultarCierres');
+        const btnExportarCierresPDF = document.getElementById('btnExportarCierresPDF');
+        const btnLimpiarCierres = document.getElementById('btnLimpiarCierres');
+        const resultadosCierresDiv = document.getElementById('resultadosCierres');
+        const cierreSaldoInicialSpan = document.getElementById('cierreSaldoInicial');
+        const cierreTotalEntradasSpan = document.getElementById('cierreTotalEntradas');
+        const cierreTotalVentasSpan = document.getElementById('cierreTotalVentas');
+        const cierreSaldoFinalSpan = document.getElementById('cierreSaldoFinal');
+
+        async function consultarCierres() {
+            const fechaInicio = cierresFechaInicioInput.value;
+            const fechaFin = cierresFechaFinInput.value;
+
+            if (!fechaInicio || !fechaFin) {
+                showToast('Por favor, selecciona las fechas de inicio y fin.', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const result = await fetchData('getCierreCaja', { startDate: fechaInicio, endDate: fechaFin });
+                if (result) {
+                    cierreSaldoInicialSpan.textContent = formatCurrency(result.saldoInicial);
+                    cierreTotalEntradasSpan.textContent = formatCurrency(result.totalEntradas);
+                    cierreTotalVentasSpan.textContent = formatCurrency(result.totalVentas); 
+                    cierreSaldoFinalSpan.textContent = formatCurrency(result.saldoFinal);
+                    resultadosCierresDiv.classList.remove('hidden');
+                } else {
+                    resultadosCierresDiv.classList.add('hidden');
+                }
+            } catch (error) {
+                showToast('Error al consultar cierres.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function exportarCierresPDF() {
+            const fechaInicio = cierresFechaInicioInput.value;
+            const fechaFin = cierresFechaFinInput.value;
+
+            if (!fechaInicio || !fechaFin) {
+                showToast('Por favor, selecciona las fechas de inicio y fin para exportar el PDF.', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const result = await fetchData('generateCierrePDF', { startDate: fechaInicio, endDate: fechaFin });
+                if (result && result.url) {
+                    window.open(result.url, '_blank');
+                    showToast('PDF de cierre generado. Se abrirá en una nueva pestaña.', 'success');
+                } else {
+                    showToast('No se pudo generar el PDF de cierre. Intenta de nuevo.', 'error');
+                }
+            } catch (error) {
+                showToast('Error al generar el PDF.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function clearCierresForm() {
+            cierresFechaInicioInput.value = '';
+            cierresFechaFinInput.value = '';
+            resultadosCierresDiv.classList.add('hidden');
+        }
+
+        // --- INICIALIZACIÓN Y EVENT LISTENERS ---
+
+        async function updateAllLists() {
+            await renderInventarioList();
+            await renderClientesList();
+        }
+
+        async function initApp() {
+            showLoading(true);
+            // Load local data and ensure they are arrays
+            offlineData.clientes = await loadLocalData('clientes');
+            offlineData.inventario = await loadLocalData('inventario');
+            offlineData.transacciones = await loadLocalData('transacciones');
+
+            // Explicitly ensure they are arrays, even if IndexedDB returns null/undefined or an empty object from some edge case.
+            offlineData.clientes = Array.isArray(offlineData.clientes) ? offlineData.clientes : [];
+            offlineData.inventario = Array.isArray(offlineData.inventario) ? offlineData.inventario : [];
+            offlineData.transacciones = Array.isArray(offlineData.transacciones) ? offlineData.transacciones : [];
+            
+            // Initialize onlineData from offlineData, ensuring array types
+            onlineData = {
+                clientes: [...offlineData.clientes],
+                inventario: [...offlineData.inventario],
+                transacciones: [...offlineData.transacciones]
+            };
+            
+            // Update UI with initial data
+            await updateAllLists();
+
+            // Then try to synchronize with online data
+            await synchronizeData();
+            
+            appInitialized = true;
+            showLoading(false);
+            document.getElementById('app-content').classList.remove('hidden'); // Hide matrix after actual data load
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', initApp);
+        syncButton.addEventListener('click', synchronizeData);
+
+        // Tab Navigation
+        tabVentas.addEventListener('click', () => showTab('contentVentas'));
+        tabRecibos.addEventListener('click', () => showTab('contentRecibos'));
+        tabMasOpciones.addEventListener('click', () => showTab('contentMasOpciones'));
+
+        // Mas Opciones Sub-navigation
+        btnGoInventario.addEventListener('click', () => showOptionSection('sectionInventario'));
+        btnGoClientes.addEventListener('click', () => showOptionSection('sectionClientes'));
+        btnGoCierres.addEventListener('click', () => showOptionSection('sectionCierres'));
+
+        // Ventas Tab Listeners
+        ventaClienteSearch.addEventListener('input', () => filterClienteSuggestions(ventaClienteSearch, ventaClienteSuggestions, selectVentaCliente));
+        ventaClienteSearch.addEventListener('focus', () => filterClienteSuggestions(ventaClienteSearch, ventaClienteSuggestions, selectVentaCliente));
+        ventaClienteSearch.addEventListener('blur', () => setTimeout(() => ventaClienteSuggestions.classList.add('hidden'), 200)); // Hide after slight delay
+
+        soloPagoACuentaCheckbox.addEventListener('change', () => {
+            if (soloPagoACuentaCheckbox.checked) {
+                productosVentaSection.classList.add('hidden');
+                selectedProducts = {}; // Clear products if switching to payment mode
+                productosSeleccionadosDiv.innerHTML = '';
+            } else {
+                productosVentaSection.classList.remove('hidden');
+            }
+            calculateVentaSummary();
+        });
+        productoSearch.addEventListener('input', filterProductSuggestions);
+        productoSearch.addEventListener('focus', filterProductSuggestions);
+        productoSearch.addEventListener('blur', () => setTimeout(() => productoSuggestions.classList.add('hidden'), 200));
+
+        ventaMontoPagoInput.addEventListener('input', calculateVentaSummary);
+        btnRegistrarVenta.addEventListener('click', registerVenta);
+        btnLimpiarVenta.addEventListener('click', clearVentaForm);
+
+        // Recibos Tab Listeners
+        reciboClienteSearch.addEventListener('input', () => filterClienteSuggestions(reciboClienteSearch, reciboClienteSuggestions, selectReciboCliente));
+        reciboClienteSearch.addEventListener('focus', () => filterClienteSuggestions(reciboClienteSearch, reciboClienteSuggestions, selectReciboCliente));
+        reciboClienteSearch.addEventListener('blur', () => setTimeout(() => reciboClienteSuggestions.classList.add('hidden'), 200));
+
+        btnGenerarReciboTexto.addEventListener('click', () => {
+            if (selectedReciboCliente) {
+                // To get a full detailed receipt, we need to fetch the last relevant transaction
+                // For now, this button triggers the same text output as the automatic one
+                // You might want to implement a way to select a specific transaction for the receipt here.
+                showToast('Recibo en texto plano generado y copiado (últimos movimientos).', 'info');
+                // The automatic copy is done by registerVenta. For this button, just show the movements.
+            } else {
+                showToast('Selecciona un cliente para generar el recibo.', 'error');
+            }
+        });
+        btnGenerarReciboPDF.addEventListener('click', generatePdfRecibo);
+        copyReceiptButton.addEventListener('click', () => {
+            navigator.clipboard.writeText(receiptTextOutput.textContent).then(() => {
+                showToast('Recibo copiado al portapapeles.', 'success');
+            }).catch(err => {
+                showToast('Error al copiar el recibo.', 'error');
+                console.error('Error al copiar el recibo:', err);
+            });
+        });
+        closeReceiptModalButton.addEventListener('click', () => receiptModal.classList.add('hidden'));
+
+
+        // Inventario Listeners
+        btnGuardarProducto.addEventListener('click', saveProduct);
+        btnActualizarProducto.addEventListener('click', updateProduct);
+        btnEliminarProducto.addEventListener('click', deleteProduct);
+        btnLimpiarInventario.addEventListener('click', clearInventarioForm);
+
+        // Clientes Listeners
+        btnGuardarCliente.addEventListener('click', saveCliente);
+        btnActualizarCliente.addEventListener('click', updateCliente);
+        btnLimpiarCliente.addEventListener('click', clearClienteForm);
+
+        // Cierres Listeners
+        btnConsultarCierres.addEventListener('click', consultarCierres);
+        btnExportarCierresPDF.addEventListener('click', exportarCierresPDF);
+        btnLimpiarCierres.addEventListener('click', clearCierresForm);
+
+
+        // Offline/Online Status Listener
+        window.addEventListener('online', () => {
+            showToast('Conexión a internet restablecida. Sincronizando datos...', 'info');
+            synchronizeData();
+        });
+        window.addEventListener('offline', () => {
+            showToast('Has perdido la conexión a internet. Funcionando en modo offline.', 'error');
+        });
+
+    </script>
+</body>
+</html>
