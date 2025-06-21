@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alesfun-crm-cache-v2'; // Cambiado a v2 para forzar la actualización
+const CACHE_NAME = 'alesfun-crm-cache-v3'; // Incrementado a v3 para forzar la actualización
 const urlsToCache = [
     '/',
     '/index.html',
