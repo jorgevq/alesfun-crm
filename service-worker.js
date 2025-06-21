@@ -1,7 +1,7 @@
 // service-worker.js
 // Nombre de la caché para tu aplicación. Incrementa la versión si realizas cambios importantes
 // en los recursos precargados para forzar al navegador a descargar la nueva versión.
-const CACHE_NAME = 'alesfun-crm-cache-v3'; // <--- VERSIÓN INCREMENTADA
+const CACHE_NAME = 'alesfun-crm-cache-v5'; // <--- VERSIÓN INCREMENTADA DE NUEVO para asegurar la actualización.
 // La URL de la página offline. Asegúrate de que este archivo exista en la raíz de tu proyecto.
 const OFFLINE_URL = '/offline.html';
 
@@ -27,17 +27,40 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME)
             .then((cache) => {
                 console.log('Service Worker: Caché abierto.');
-                // Intenta agregar todos los URLs a la caché. Si *cualquier* recurso falla,
-                // toda la instalación del Service Worker fallará. Esto es bueno para la depuración.
-                return cache.addAll(urlsToCache)
+                
+                // MODIFICACIÓN: En lugar de cache.addAll, iteramos y cacheamos cada recurso individualmente.
+                // Esto hace la instalación más resiliente si alguna URL falla,
+                // y nos da un mensaje de error más específico en la consola.
+                const cachePromises = urlsToCache.map(url => {
+                    return fetch(url)
+                        .then(response => {
+                            if (response.ok) {
+                                // Clonar la respuesta porque una respuesta solo se puede leer una vez
+                                console.log(`Service Worker: Cached successfully: ${url}`);
+                                return cache.put(url, response.clone());
+                            } else {
+                                console.warn(`Service Worker: Fallo al cachear ${url}. Estado: ${response.status}.`);
+                                // Si la respuesta no es OK, no cacheamos, pero no detenemos la instalación.
+                                return Promise.resolve(); 
+                            }
+                        })
+                        .catch(error => {
+                            console.error(`Service Worker: Error de red al precargar ${url}:`, error);
+                            // No propagamos el error para no fallar toda la instalación.
+                            return Promise.resolve(); 
+                        });
+                });
+
+                return Promise.all(cachePromises)
                     .then(() => {
-                        console.log('Service Worker: Todos los recursos precargados exitosamente.');
+                        console.log('Service Worker: Intento de precarga de recursos completado.');
                         // Forzar la activación del nuevo Service Worker inmediatamente para que tome el control.
                         self.skipWaiting();
                     })
                     .catch((error) => {
-                        console.error('Service Worker: Fallo al precargar recursos. Verifica las URLs y la existencia de los archivos:', error);
-                        // Lanza el error para que la instalación falle y puedas depurar.
+                        // Este catch solo se activaría si Promise.all falla por una razón inesperada,
+                        // ya que los catch individuales de fetch(url) manejan los errores de recursos.
+                        console.error('Service Worker: Fallo general durante la instalación de precarga:', error);
                         throw error;
                     });
             })
