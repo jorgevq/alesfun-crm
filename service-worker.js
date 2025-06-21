@@ -1,94 +1,103 @@
-const CACHE_NAME = 'alesfun-crm-cache-v3'; // Incrementado a v3 para forzar la actualización
+// service-worker.js
+const CACHE_NAME = 'alesfun-crm-cache-v2'; // Incrementa la versión para forzar la actualización del Service Worker
+const OFFLINE_URL = '/offline.html'; // Asegúrate de que este archivo exista en la raíz de tu proyecto
+
+// Lista de recursos a precargar durante la instalación del Service Worker
+// Asegúrate de que todas estas rutas son CORRECTAS y los archivos EXISTEN en tu proyecto.
 const urlsToCache = [
-    '/',
+    '/', // La página principal (la raíz)
     '/index.html',
-    '/manifest.json',
-    '/service-worker.js',
-    '/images/icon-192x192.png', // Asegúrate de que estos iconos existan en la carpeta /images
-    '/images/icon-512x512.png', // Asegúrate de que estos iconos existan en la carpeta /images
-    'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css',
-    'https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap'
+    OFFLINE_URL, // Tu página offline
+    '/manifest.json', // Tu manifiesto de PWA
+    '/images/icon-192x192.png', // Tu icono de PWA
+    // Si tienes archivos CSS y JS separados (además del JS inline en index.html), inclúyelos aquí:
+    // '/styles.css', // Ejemplo si tuvieras un archivo styles.css
+    // '/script.js', // Ejemplo si tuvieras un archivo script.js principal
+    // Si usas librerías JS locales, también aquí:
+    // '/lib/jsPDF/jspdf.umd.min.js', // Si usas jspdf localmente
 ];
 
 self.addEventListener('install', (event) => {
+    console.log('Service Worker: Instalando y precargando recursos...');
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => {
-                console.log('Service Worker: Cache abierta');
-                return cache.addAll(urlsToCache);
+                console.log('Service Worker: Cache abierto.');
+                return cache.addAll(urlsToCache)
+                    .then(() => {
+                        console.log('Service Worker: Todos los recursos precargados exitosamente.');
+                        // Forzar la activación del nuevo Service Worker inmediatamente
+                        self.skipWaiting();
+                    })
+                    .catch((error) => {
+                        console.error('Service Worker: Fallo al precargar recursos. Verificando URL:', error);
+                        // Importante: Si cache.addAll falla para *cualquier* recurso, el Service Worker no se instalará.
+                        // Esto es bueno para depurar, pero para producción querrías quizás filtrar errores menos críticos.
+                        // Por ejemplo, podríamos intentar precargar uno por uno si un recurso no es crítico.
+                        // Para este caso, lanzamos el error para que falle la instalación.
+                        throw error;
+                    });
             })
-            .then(() => self.skipWaiting()) // Forzamos la activación inmediata del nuevo SW
-            .catch(error => {
-                console.error('Service Worker: Fallo al cachear:', error);
-                // Si falla, es probable que un recurso no se encuentre (ej. icono 404).
-                // Continúa la instalación, pero el caché será parcial.
-                // Es crucial que los recursos en urlsToCache existan.
+            .catch((error) => {
+                console.error('Service Worker: Fallo al abrir la caché durante la instalación:', error);
+                throw error;
             })
     );
 });
 
 self.addEventListener('activate', (event) => {
+    console.log('Service Worker: Activando y limpiando cachés antiguas...');
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('Service Worker: Eliminando cache antigua:', cacheName);
+                        console.log('Service Worker: Eliminando caché antigua:', cacheName);
                         return caches.delete(cacheName);
                     }
+                    return Promise.resolve();
                 })
             );
-        }).then(() => self.clients.claim()) // Permite que el SW tome control de las pestañas abiertas
+        })
+        .then(() => {
+            console.log('Service Worker: Cachés antiguas limpiadas. Activación completa.');
+            // Asegúrate de que las páginas se controlen inmediatamente por el nuevo SW
+            return clients.claim();
+        })
     );
 });
 
 self.addEventListener('fetch', (event) => {
-    // Si la solicitud es para la API de Google Apps Script, intentar siempre la red
-    if (event.request.url.startsWith('https://script.google.com/macros/')) {
-        event.respondWith(
-            fetch(event.request).catch(() => {
-                // Si la red falla, no tenemos una copia en caché de la API,
-                // así que solo fallamos o mostramos un mensaje de offline.
-                console.log('Service Worker: Fallo de red para la API, no se puede servir desde caché.');
-                // No respondemos con un error HTTP si estamos offline para que el frontend maneje la excepción
-                return new Response(null, { status: 503, statusText: 'Service Unavailable - Offline' });
-            })
-        );
+    // Solo manejamos solicitudes GET para URLs http(s)
+    if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
         return;
     }
 
     event.respondWith(
         caches.match(event.request)
-            .then((response) => {
-                // Devolver recurso desde caché si está disponible
-                if (response) {
-                    return response;
+            .then((cachedResponse) => {
+                // Devolver respuesta cacheada si está disponible
+                if (cachedResponse) {
+                    return cachedResponse;
                 }
+
                 // Si no está en caché, intentar obtener de la red
-                return fetch(event.request).then((networkResponse) => {
-                    // Si es una respuesta válida, cachearla
-                    if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-                        const responseToCache = networkResponse.clone();
-                        // Solo cachear si la URL no es la API
-                        if (!event.request.url.startsWith('https://script.google.com/macros/')) {
-                             caches.open(CACHE_NAME).then((cache) => {
-                                 cache.put(event.request, responseToCache);
-                             });
+                return fetch(event.request)
+                    .then((networkResponse) => {
+                        // Si la respuesta de la red es válida (no error, no parcial), la guardamos en caché
+                        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+                            const responseToCache = networkResponse.clone();
+                            caches.open(CACHE_NAME).then((cache) => {
+                                cache.put(event.request, responseToCache);
+                            });
                         }
-                    }
-                    return networkResponse;
-                }).catch(() => {
-                    // Si falla la red (offline), intentar servir una página offline si es una navegación
-                    if (event.request.mode === 'navigate') {
-                        // Podrías servir una página offline específica si tuvieras una
-                        // return caches.match('/offline.html');
-                        console.log('Service Worker: Modo offline para navegación, no hay página offline específica.');
-                    }
-                    // Si no, simplemente fallar la solicitud (el frontend lo manejará)
-                    console.log('Service Worker: Fallo de red para recurso cacheable:', event.request.url);
-                    // Retornar un Response nulo o un error para que la aplicación maneje la caída de red
-                    return new Response(null, { status: 503, statusText: 'Service Unavailable - Offline' });
-                });
+                        return networkResponse;
+                    })
+                    .catch(() => {
+                        // Si la red falla (estamos offline), intentar devolver la página offline
+                        console.log('Service Worker: Fallo de red para:', event.request.url, '. Sirviendo página offline.');
+                        return caches.match(OFFLINE_URL);
+                    });
             })
     );
 });
