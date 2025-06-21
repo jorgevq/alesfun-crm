@@ -130,9 +130,135 @@
 
     <script>
         // PEGA AQUÍ LA URL DE TU API DE APPS SCRIPT
-        const SCRIPT_URL = 'URL_DE_TU_API_AQUI';
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0Eo-hHnvVFESGW8LRVBrFGInzEUa6B8H2QDH4-tvac1OhUNBHxwy33WR8wb9vPIK8/exec';
 
         // Pega aquí el código del archivo app.js
+        // Este código va dentro de la etiqueta <script> en index.html
+
+document.addEventListener('DOMContentLoaded', () => {
+    // ---- VARIABLES GLOBALES Y ESTADO DE LA APP ----
+    const db = {
+        clientes: [],
+        inventario: [],
+        offlineQueue: []
+    };
+    
+    // ---- ELEMENTOS DEL DOM ----
+    const loadingScreen = document.getElementById('loading-screen');
+    const matrixCanvas = document.getElementById('matrix-canvas');
+    const appContainer = document.getElementById('app-container');
+    const notificationModal = document.getElementById('notification-modal');
+    const notificationMessage = document.getElementById('notification-message');
+    const notificationOkBtn = document.getElementById('notification-ok');
+
+    // ---- INICIALIZACIÓN ----
+    initMatrixEffect();
+    initApp();
+
+    function initApp() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .then(registration => console.log('Service Worker registrado con éxito:', registration))
+                .catch(error => console.log('Error al registrar Service Worker:', error));
+        }
+        loadLocalData();
+        fetchInitialData();
+        setupEventListeners();
+        renderVentasTab(); // Render inicial
+    }
+    
+    // ---- EFECTO MATRIX ----
+    function initMatrixEffect() {
+       const ctx = matrixCanvas.getContext('2d');
+       matrixCanvas.width = window.innerWidth;
+       matrixCanvas.height = window.innerHeight;
+
+       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890@#$%^&*()*&^%+-/~{[|`]}';
+       const fontSize = 16;
+       const columns = matrixCanvas.width / fontSize;
+       const drops = Array(Math.floor(columns)).fill(1);
+
+       function draw() {
+           ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+           ctx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+           ctx.fillStyle = '#00ff41'; // Verde Matrix
+           ctx.font = `${fontSize}px monospace`;
+
+           for (let i = 0; i < drops.length; i++) {
+               const text = letters.charAt(Math.floor(Math.random() * letters.length));
+               ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+               if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) {
+                   drops[i] = 0;
+               }
+               drops[i]++;
+           }
+       }
+       const matrixInterval = setInterval(draw, 33);
+
+       // Detener la animación después de un tiempo para mostrar la app
+       setTimeout(() => {
+           clearInterval(matrixInterval);
+           loadingScreen.style.opacity = '0';
+           setTimeout(() => {
+               loadingScreen.style.display = 'none';
+               appContainer.classList.remove('hidden');
+           }, 500);
+       }, 3000);
+    }
+    
+    // ---- MANEJO DE DATOS (ONLINE/OFFLINE) ----
+
+    function showNotification(message) {
+        notificationMessage.textContent = message;
+        notificationModal.classList.remove('hidden');
+    }
+
+    function hideNotification() {
+        notificationModal.classList.add('hidden');
+    }
+    
+    async function fetchInitialData() {
+        // Lógica para obtener datos
+    }
+
+    // ---- RENDERIZADO DE VISTAS ----
+    function renderVentasTab() {
+        const container = document.getElementById('tab-ventas');
+        container.innerHTML = `
+            <p class="text-xl text-cyan-400">Nueva Venta / Pago</p>
+            <!-- Formulario de venta aquí -->
+        `;
+    }
+
+    // ---- MANEJADORES DE EVENTOS ----
+    function setupEventListeners() {
+        // Tabs Principales
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', e => {
+                const tabName = e.target.dataset.tab;
+                
+                // Actualizar botones
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+
+                // Actualizar contenido
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+                document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            });
+        });
+        
+        notificationOkBtn.addEventListener('click', hideNotification);
+    }
+    
+    // ---- FUNCIONES AUXILIARES ----
+    function normalizeString(str) {
+        if (typeof str !== 'string') return '';
+        return str.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+});
+
     </script>
 </body>
 </html>
