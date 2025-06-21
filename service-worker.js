@@ -1,20 +1,24 @@
 // service-worker.js
-const CACHE_NAME = 'alesfun-crm-cache-v2'; // Incrementa la versión para forzar la actualización del Service Worker
-const OFFLINE_URL = '/offline.html'; // Asegúrate de que este archivo exista en la raíz de tu proyecto
+// Nombre de la caché para tu aplicación. Incrementa la versión si realizas cambios importantes
+// en los recursos precargados para forzar al navegador a descargar la nueva versión.
+const CACHE_NAME = 'alesfun-crm-cache-v3'; // <--- VERSIÓN INCREMENTADA
+// La URL de la página offline. Asegúrate de que este archivo exista en la raíz de tu proyecto.
+const OFFLINE_URL = '/offline.html';
 
-// Lista de recursos a precargar durante la instalación del Service Worker
-// Asegúrate de que todas estas rutas son CORRECTAS y los archivos EXISTEN en tu proyecto.
+// Lista de recursos que se precargarán y almacenarán en caché durante la instalación
+// del Service Worker. Es CRÍTICO que todas estas rutas sean correctas y los archivos existan.
 const urlsToCache = [
-    '/', // La página principal (la raíz)
-    '/index.html',
-    OFFLINE_URL, // Tu página offline
-    '/manifest.json', // Tu manifiesto de PWA
-    '/images/icon-192x192.png', // Tu icono de PWA
-    // Si tienes archivos CSS y JS separados (además del JS inline en index.html), inclúyelos aquí:
-    // '/styles.css', // Ejemplo si tuvieras un archivo styles.css
-    // '/script.js', // Ejemplo si tuvieras un archivo script.js principal
-    // Si usas librerías JS locales, también aquí:
-    // '/lib/jsPDF/jspdf.umd.min.js', // Si usas jspdf localmente
+    '/', // La página principal (la raíz de tu aplicación)
+    '/index.html', // Tu archivo HTML principal
+    OFFLINE_URL, // La página HTML a mostrar cuando no hay conexión
+    '/manifest.json', // El manifiesto de tu PWA
+    '/images/icon-192x192.png', // Un icono para tu PWA (asegúrate de que la ruta 'images/' exista y el archivo esté ahí)
+    // Agrega aquí cualquier otro recurso crítico de tu aplicación que desees precargar.
+    // Por ejemplo, si tienes un archivo CSS o JS principal separado:
+    // '/css/main.css',
+    // '/js/app.js',
+    // O si usas librerías JS locales (no CDN):
+    // '/lib/some-library.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -22,19 +26,18 @@ self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => {
-                console.log('Service Worker: Cache abierto.');
+                console.log('Service Worker: Caché abierto.');
+                // Intenta agregar todos los URLs a la caché. Si *cualquier* recurso falla,
+                // toda la instalación del Service Worker fallará. Esto es bueno para la depuración.
                 return cache.addAll(urlsToCache)
                     .then(() => {
                         console.log('Service Worker: Todos los recursos precargados exitosamente.');
-                        // Forzar la activación del nuevo Service Worker inmediatamente
+                        // Forzar la activación del nuevo Service Worker inmediatamente para que tome el control.
                         self.skipWaiting();
                     })
                     .catch((error) => {
-                        console.error('Service Worker: Fallo al precargar recursos. Verificando URL:', error);
-                        // Importante: Si cache.addAll falla para *cualquier* recurso, el Service Worker no se instalará.
-                        // Esto es bueno para depurar, pero para producción querrías quizás filtrar errores menos críticos.
-                        // Por ejemplo, podríamos intentar precargar uno por uno si un recurso no es crítico.
-                        // Para este caso, lanzamos el error para que falle la instalación.
+                        console.error('Service Worker: Fallo al precargar recursos. Verifica las URLs y la existencia de los archivos:', error);
+                        // Lanza el error para que la instalación falle y puedas depurar.
                         throw error;
                     });
             })
@@ -51,6 +54,7 @@ self.addEventListener('activate', (event) => {
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
+                    // Elimina cualquier caché que no sea la versión actual
                     if (cacheName !== CACHE_NAME) {
                         console.log('Service Worker: Eliminando caché antigua:', cacheName);
                         return caches.delete(cacheName);
@@ -61,14 +65,14 @@ self.addEventListener('activate', (event) => {
         })
         .then(() => {
             console.log('Service Worker: Cachés antiguas limpiadas. Activación completa.');
-            // Asegúrate de que las páginas se controlen inmediatamente por el nuevo SW
+            // Asegura que las páginas actualmente abiertas sean controladas por este Service Worker.
             return clients.claim();
         })
     );
 });
 
 self.addEventListener('fetch', (event) => {
-    // Solo manejamos solicitudes GET para URLs http(s)
+    // Ignorar solicitudes que no sean GET o que no sean HTTP/HTTPS (por ejemplo, extensiones de navegador).
     if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
         return;
     }
@@ -76,15 +80,16 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         caches.match(event.request)
             .then((cachedResponse) => {
-                // Devolver respuesta cacheada si está disponible
+                // Si el recurso está en caché, lo devolvemos inmediatamente.
                 if (cachedResponse) {
                     return cachedResponse;
                 }
 
-                // Si no está en caché, intentar obtener de la red
+                // Si no está en caché, intentamos obtenerlo de la red.
                 return fetch(event.request)
                     .then((networkResponse) => {
-                        // Si la respuesta de la red es válida (no error, no parcial), la guardamos en caché
+                        // Si la respuesta de la red es válida (estado 200, tipo 'basic' para evitar errores CORS),
+                        // la clonamos y la guardamos en caché para futuras solicitudes.
                         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
                             const responseToCache = networkResponse.clone();
                             caches.open(CACHE_NAME).then((cache) => {
@@ -94,7 +99,8 @@ self.addEventListener('fetch', (event) => {
                         return networkResponse;
                     })
                     .catch(() => {
-                        // Si la red falla (estamos offline), intentar devolver la página offline
+                        // Si la red falla (es decir, estamos offline) y el recurso no estaba en caché,
+                        // intentamos devolver la página offline.html.
                         console.log('Service Worker: Fallo de red para:', event.request.url, '. Sirviendo página offline.');
                         return caches.match(OFFLINE_URL);
                     });
