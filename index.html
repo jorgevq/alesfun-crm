@@ -1,894 +1,1091 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ALESFUN CRM</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="images/icon-192x192.png">
-    <meta name="theme-color" content="#001a33"/>
-    <link rel="icon" href="favicon.ico" type="image/x-icon"> <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap" rel="stylesheet">
-    <style>
-        body {
-            background-color: #0d1a26; /* Darker blue-grey */
-            color: #00e6e6; /* Cyan */
-            font-family: 'Major Mono Display', monospace; /* Hacker/Matrix font */
-        }
-        .matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            z-index: -1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #0d1a26;
-        }
-        .matrix-column {
-            display: flex;
-            flex-direction: column;
-            white-space: pre;
-            opacity: 0.1; /* More subtle */
-            animation: matrix-scroll linear infinite;
-        }
-        .matrix-char {
-            color: #00cc66; /* Green for numbers */
-            font-size: 1.2em;
-            text-shadow: 0 0 5px #00cc66;
-        }
-        @keyframes matrix-scroll {
-            from { transform: translateY(-100%); }
-            to { transform: translateY(100%); }
-        }
-        .tab-button {
-            @apply px-4 py-2 text-lg border-b-2 border-transparent;
-        }
-        .tab-button.active {
-            @apply border-b-2 border-current;
-        }
-        .input-dark {
-            @apply bg-gray-800 text-cyan-400 border border-cyan-700 p-2 rounded focus:ring-2 focus:ring-cyan-500 focus:border-transparent;
-        }
-        .btn-dark {
-            @apply bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded transition duration-300;
-        }
-        .btn-green {
-            @apply bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded transition duration-300;
-        }
-        .btn-red {
-            @apply bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded transition duration-300;
-        }
-        .table-dark th, .table-dark td {
-            @apply border border-cyan-800 px-4 py-2;
-        }
-        .table-dark th {
-            @apply bg-gray-900;
-        }
-        .table-dark tr:nth-child(even) {
-            @apply bg-gray-800;
-        }
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.95); /* Semi-transparent dark overlay */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            z-index: 1000;
-            color: #00e6e6; /* Cyan */
-            font-size: 2em;
-        }
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-        .modal-content {
-            background-color: #0d1a26;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px #00e6e6;
-            color: #00e6e6;
-            width: 90%;
-            max-width: 500px;
-        }
-    </style>
-</head>
-<body class="p-4">
-    <div id="matrix-loading-bg" class="matrix-bg"></div>
-
-    <div id="app-content" class="hidden">
-        <header class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-blue-400">ALESFUN CRM</h1>
-            <button id="syncButton" class="text-cyan-400 hover:text-cyan-200 flex items-center btn-dark">
-                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m0 0v5h-.582m15.356-5h.582m-15.356 2A8.001 8.001 0 0020 13a8.001 8.001 0 00-15.356-2m0 0v5h-.582"></path></svg>
-                Sincronizar
-            </button>
-        </header>
-
-        <nav class="mb-6 border-b border-cyan-700">
-            <button id="tabVentas" class="tab-button active text-green-400">Ventas</button>
-            <button id="tabRecibos" class="tab-button text-blue-400">Recibos</button>
-            <button id="tabMasOpciones" class="tab-button text-purple-400">Más Opciones</button>
-        </nav>
-
-        <div id="contentVentas" class="tab-content">
-            <h2 class="text-2xl text-green-300 mb-4">Gestión de Ventas / Pagos</h2>
-            <div class="mb-4">
-                <label for="ventaClienteSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Cliente (Nombre/ID):</label>
-                <input type="text" id="ventaClienteSearch" class="input-dark w-full" placeholder="Escribe nombre o ID del cliente">
-                <div id="ventaClienteSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
-            </div>
-            <div class="mb-4 p-4 border border-cyan-800 rounded-lg">
-                <h3 class="text-lg text-cyan-300 mb-2">Datos del Cliente:</h3>
-                <p>ID: <span id="ventaClienteId" class="text-white"></span></p>
-                <p>Nombre: <span id="ventaClienteNombre" class="text-white"></span></p>
-                <p>Saldo Actual: <span id="ventaClienteSaldo" class="text-white"></span></p>
-                <div class="mt-4 flex items-center">
-                    <input type="checkbox" id="soloPagoACuenta" class="form-checkbox h-5 w-5 text-blue-600 bg-gray-700 border-gray-600 rounded">
-                    <label for="soloPagoACuenta" class="ml-2 text-cyan-400">Solo Pago a Cuenta</label>
-                </div>
-            </div>
-
-            <div id="productosVentaSection">
-                <h3 class="text-lg text-green-300 mb-2">Productos a la Venta:</h3>
-                <div class="mb-4">
-                    <label for="productoSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Producto (Nombre/Código):</label>
-                    <input type="text" id="productoSearch" class="input-dark w-full" placeholder="Escribe nombre o código del producto">
-                    <div id="productoSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
-                </div>
-                <div id="productosSeleccionados" class="mb-4">
-                    </div>
-            </div>
-
-            <div class="mb-6 p-4 border border-cyan-800 rounded-lg">
-                <h3 class="text-lg text-yellow-300 mb-2">Resumen de Pago:</h3>
-                <p>Total a Pagar: <span id="ventaTotalPagar" class="text-white font-bold">0.00</span></p>
-                <p>Saldo Pendiente (Venta): <span id="ventaSaldoPendienteVenta" class="text-white">0.00</span></p>
-                <div class="mt-2">
-                    <label for="ventaMontoPago" class="block text-cyan-400 text-sm font-bold mb-2">Monto de Pago:</label>
-                    <input type="number" id="ventaMontoPago" class="input-dark w-full" placeholder="0.00" step="0.01">
-                </div>
-                <p class="mt-2">Cambio: <span id="ventaCambio" class="text-white font-bold">0.00</span></p>
-                <p class="mt-2">Nuevo Saldo del Cliente: <span id="ventaNuevoSaldoCliente" class="text-white font-bold">0.00</span></p>
-            </div>
-
-            <div class="flex justify-between">
-                <button id="btnRegistrarVenta" class="btn-dark">Registrar Venta/Pago</button>
-                <button id="btnLimpiarVenta" class="btn-red">Limpiar Formulario</button>
-            </div>
-        </div>
-
-        <div id="contentRecibos" class="tab-content hidden">
-            <h2 class="text-2xl text-blue-300 mb-4">Generar Recibos</h2>
-            <div class="mb-4">
-                <label for="reciboClienteSearch" class="block text-cyan-400 text-sm font-bold mb-2">Buscar Cliente (Nombre/ID):</label>
-                <input type="text" id="reciboClienteSearch" class="input-dark w-full" placeholder="Escribe nombre o ID del cliente">
-                <div id="reciboClienteSuggestions" class="bg-gray-800 border border-cyan-700 mt-1 max-h-40 overflow-y-auto hidden"></div>
-            </div>
-            <div class="mb-4 p-4 border border-cyan-800 rounded-lg">
-                <h3 class="text-lg text-cyan-300 mb-2">Datos del Cliente Seleccionado:</h3>
-                <p>ID: <span id="reciboClienteId" class="text-white"></span></p>
-                <p>Nombre: <span id="reciboClienteNombre" class="text-white"></span></p>
-                <p>Saldo Actual: <span id="reciboClienteSaldo" class="text-white"></span></p>
-            </div>
-
-            <div class="flex space-x-4 mb-4">
-                <button id="btnGenerarReciboTexto" class="btn-dark flex-1">Generar Recibo (Texto)</button>
-                <button id="btnGenerarReciboPDF" class="btn-green flex-1">Generar Recibo (PDF)</button>
-            </div>
-
-            <div id="ultimosMovimientos" class="mt-6 border border-cyan-800 rounded-lg p-4">
-                <h3 class="text-lg text-yellow-300 mb-2">Últimos 6 Movimientos:</h3>
-                <pre id="reciboMovimientosTexto" class="bg-gray-800 p-3 rounded text-sm overflow-auto max-h-60"></pre>
-                <button id="btnCopiarRecibo" class="btn-dark mt-4 w-full">Copiar Recibo</button>
-            </div>
-        </div>
-
-        <div id="contentMasOpciones" class="tab-content hidden">
-            <h2 class="text-2xl text-purple-300 mb-4">Más Opciones</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <button id="btnGoInventario" class="btn-dark">Gestión de Inventario</button>
-                <button id="btnGoClientes" class="btn-dark">Gestión de Clientes</button>
-                <button id="btnGoCierres" class="btn-dark">Cierres de Caja</button>
-            </div>
-
-            <div id="sectionInventario" class="hidden">
-                <h3 class="text-xl text-yellow-300 mb-4">Gestión de Inventario</h3>
-                <div class="mb-4">
-                    <label for="inventarioIdProducto" class="block text-cyan-400 text-sm font-bold mb-2">ID Producto:</label>
-                    <input type="text" id="inventarioIdProducto" class="input-dark w-full" placeholder="ID Único del Producto">
-                </div>
-                <div class="mb-4">
-                    <label for="inventarioNombreProducto" class="block text-cyan-400 text-sm font-bold mb-2">Nombre Producto:</label>
-                    <input type="text" id="inventarioNombreProducto" class="input-dark w-full" placeholder="Nombre del Producto">
-                </div>
-                <div class="mb-4">
-                    <label for="inventarioPrecio" class="block text-cyan-400 text-sm font-bold mb-2">Precio:</label>
-                    <input type="number" id="inventarioPrecio" class="input-dark w-full" step="0.01" placeholder="0.00">
-                </div>
-                <div class="mb-4">
-                    <label for="inventarioStock" class="block text-cyan-400 text-sm font-bold mb-2">Stock:</label>
-                    <input type="number" id="inventarioStock" class="input-dark w-full" step="1" placeholder="0">
-                </div>
-                <div class="flex space-x-4 mb-6">
-                    <button id="btnGuardarProducto" class="btn-dark">Guardar Producto</button>
-                    <button id="btnActualizarProducto" class="btn-green">Actualizar Producto</button>
-                    <button id="btnEliminarProducto" class="btn-red">Eliminar Producto</button>
-                    <button id="btnLimpiarInventario" class="btn-red">Limpiar</button>
-                </div>
-
-                <h4 class="text-lg text-cyan-300 mb-2">Lista de Productos:</h4>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full bg-gray-900 table-dark">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Nombre</th>
-                                <th>Precio</th>
-                                <th>Stock</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventarioLista">
-                            </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div id="sectionClientes" class="hidden">
-                <h3 class="text-xl text-yellow-300 mb-4">Gestión de Clientes</h3>
-                <div class="mb-4">
-                    <label for="clienteId" class="block text-cyan-400 text-sm font-bold mb-2">ID Cliente:</label>
-                    <input type="text" id="clienteId" class="input-dark w-full" placeholder="ID Único del Cliente">
-                </div>
-                <div class="mb-4">
-                    <label for="clienteNombre" class="block text-cyan-400 text-sm font-bold mb-2">Nombre:</label>
-                    <input type="text" id="clienteNombre" class="input-dark w-full" placeholder="Nombre Completo">
-                </div>
-                <div class="mb-4">
-                    <label for="clienteCelular" class="block text-cyan-400 text-sm font-bold mb-2">Celular:</label>
-                    <input type="text" id="clienteCelular" class="input-dark w-full" placeholder="Número de Celular">
-                </div>
-                <div class="mb-4">
-                    <label for="clienteDireccion" class="block text-cyan-400 text-sm font-bold mb-2">Dirección:</label>
-                    <input type="text" id="clienteDireccion" class="input-dark w-full" placeholder="Dirección del Cliente">
-                </div>
-                <div class="mb-4">
-                    <label for="clienteCI" class="block text-cyan-400 text-sm font-bold mb-2">CI:</label>
-                    <input type="text" id="clienteCI" class="input-dark w-full" placeholder="Carnet de Identidad">
-                </div>
-                <div class="mb-4">
-                    <label for="clienteSaldoActual" class="block text-cyan-400 text-sm font-bold mb-2">Saldo Actual:</label>
-                    <input type="number" id="clienteSaldoActual" class="input-dark w-full" step="0.01" placeholder="0.00">
-                </div>
-                <div class="flex space-x-4 mb-6">
-                    <button id="btnGuardarCliente" class="btn-dark">Guardar Cliente</button>
-                    <button id="btnActualizarCliente" class="btn-green">Actualizar Cliente</button>
-                    <button id="btnLimpiarCliente" class="btn-red">Limpiar</button>
-                </div>
-
-                <h4 class="text-lg text-cyan-300 mb-2">Lista de Clientes:</h4>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full bg-gray-900 table-dark">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Nombre</th>
-                                <th>Celular</th>
-                                <th>Saldo</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="clientesLista">
-                            </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div id="sectionCierres" class="hidden">
-                <h3 class="text-xl text-yellow-300 mb-4">Cierres de Caja</h3>
-                <div class="mb-4">
-                    <label for="cierresFechaInicio" class="block text-cyan-400 text-sm font-bold mb-2">Fecha Inicio:</label>
-                    <input type="date" id="cierresFechaInicio" class="input-dark w-full">
-                </div>
-                <div class="mb-4">
-                    <label for="cierresFechaFin" class="block text-cyan-400 text-sm font-bold mb-2">Fecha Fin:</label>
-                    <input type="date" id="cierresFechaFin" class="input-dark w-full">
-                </div>
-                <div class="flex space-x-4 mb-6">
-                    <button id="btnConsultarCierres" class="btn-dark">Consultar Cierres</button>
-                    <button id="btnExportarCierresPDF" class="btn-green">Exportar PDF</button>
-                    <button id="btnLimpiarCierres" class="btn-red">Limpiar</button>
-                </div>
-
-                <div id="resultadosCierres" class="mt-6 border border-cyan-800 rounded-lg p-4 hidden">
-                    <h4 class="text-lg text-cyan-300 mb-2">Resultados del Cierre:</h4>
-                    <p>Saldo Inicial: <span id="cierreSaldoInicial" class="text-white">0.00</span></p>
-                    <p>Total Entradas (Recibido en Caja): <span id="cierreTotalEntradas" class="text-white">0.00</span></p>
-                    <p>Total Ventas (Valor de productos): <span id="cierreTotalVentas" class="text-white">0.00</span></p>
-                    <p>Saldo Final: <span id="cierreSaldoFinal" class="text-white font-bold">0.00</span></p>
-                </div>
-            </div>
-        </div>
-
-        <div id="loadingOverlay" class="loading-overlay hidden">
-            Cargando...
-        </div>
-
-        <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg transition-all duration-300 opacity-0 z-50">
-            Mensaje aquí
-        </div>
-
-        <div id="receiptModal" class="modal hidden">
-            <div class="modal-content">
-                <h3 class="text-xl mb-4">Recibo Generado</h3>
-                <pre id="receiptTextOutput" class="bg-gray-800 p-3 rounded text-sm overflow-auto max-h-60 text-white"></pre>
-                <div class="flex justify-end mt-4">
-                    <button id="copyReceiptButton" class="btn-dark mr-2">Copiar Recibo</button>
-                    <button id="closeReceiptModalButton" class="btn-red">Cerrar</button>
-                </div>
-            </div>
-        </div>
-
-    </div> <script>
-        // PWA Service Worker Registration
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
-                    .then(registration => {
-                        console.log('Service Worker registrado con éxito:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.error('Error al registrar Service Worker:', error);
-                    });
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+            .then(registration => {
+                console.log('Service Worker registrado con éxito:', registration.scope);
+            })
+            .catch(error => {
+                console.error('Error al registrar Service Worker:', error);
             });
+    });
+}
+
+// MATRIX BACKGROUND ANIMATION (optional, for loading screen)
+const matrixBg = document.getElementById('matrix-loading-bg');
+const appContent = document.getElementById('app-content'); // Obtener el contenedor principal
+
+if (matrixBg) {
+    const characters = '0123456789ABCDEF'; // Hex characters for matrix
+    const columnCount = 50; // Adjust for more/fewFewer columns
+    const charCount = 30; // Adjust for length of columns
+
+    for (let i = 0; i < columnCount; i++) {
+        const column = document.createElement('div');
+        column.classList.add('matrix-column');
+        let columnText = '';
+        for (let j = 0; j < charCount; j++) {
+            columnText += characters[Math.floor(Math.random() * characters.length)] + '\n';
         }
+        column.innerHTML = columnText.split('').map(char => `<span class="matrix-char">${char}</span>`).join('');
+        column.style.animationDuration = `${Math.random() * 5 + 5}s`; // Random speed 5-10s
+        column.style.animationDelay = `${Math.random() * -10}s`; // Start at random positions
+        column.style.left = `${(i / columnCount) * 100}%`;
+        matrixBg.appendChild(column);
+    }
+}
 
-        // MATRIX BACKGROUND ANIMATION (optional, for loading screen)
-        const matrixBg = document.getElementById('matrix-loading-bg');
-        const appContent = document.getElementById('app-content'); // Obtener el contenedor principal
 
-        if (matrixBg) {
-            const characters = '0123456789ABCDEF'; // Hex characters for matrix
-            const columnCount = 50; // Adjust for more/fewFewer columns
-            const charCount = 30; // Adjust for length of columns
+// --- CONFIGURACIÓN Y FUNCIONES GLOBALES ---
+// *** VERIFICA ESTA URL DE NUEVO EN TU GOOGLE APPS SCRIPT DESPUÉS DE DESPLEGAR ***
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0Eo-hHnvVFESGW8LRVBrFGInzEUa6B8H2QDH4-tvac1OhUNBHxwy33WR8wb9vPIK8/exec'; 
+let onlineData = {
+    clientes: [],
+    inventario: [],
+    transacciones: []
+};
+let offlineData = {
+    clientes: [],
+    inventario: [],
+    transacciones: []
+};
+let appInitialized = false;
 
-            for (let i = 0; i < columnCount; i++) {
-                const column = document.createElement('div');
-                column.classList.add('matrix-column');
-                let columnText = '';
-                for (let j = 0; j < charCount; j++) {
-                    columnText += characters[Math.floor(Math.random() * characters.length)] + '\n';
-                }
-                column.innerHTML = columnText.split('').map(char => `<span class="matrix-char">${char}</span>`).join('');
-                column.style.animationDuration = `${Math.random() * 5 + 5}s`; // Random speed 5-10s
-                column.style.animationDelay = `${Math.random() * -10}s`; // Start at random positions
-                column.style.left = `${(i / columnCount) * 100}%`;
-                matrixBg.appendChild(column);
-            }
-            // MODIFICADO: Se ocultará cuando la app se inicialice completamente.
-            // setTimeout(() => {
-            //     matrixBg.classList.add('hidden');
-            //     document.getElementById('app-content').classList.remove('hidden');
-            // }, 3000); // Hide after 3 seconds for initial effect
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    if (type === 'success') {
+        toast.style.backgroundColor = '#10B981'; // Green
+    } else if (type === 'error') {
+        toast.style.backgroundColor = '#EF4444'; // Red
+    } else {
+        toast.style.backgroundColor = '#3B82F6'; // Blue
+    }
+    toast.classList.remove('opacity-0');
+    toast.classList.add('opacity-100');
+    setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0');
+    }, 3000);
+}
+
+function showLoading(show) {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (show) {
+        loadingOverlay.classList.remove('hidden');
+    } else {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+// --- FUNCIONES DE INTERACCIÓN CON GOOGLE APPS SCRIPT (API) ---
+async function fetchData(action, params = {}) {
+    try {
+        if (!navigator.onLine) {
+            showToast('Estás offline. Los datos mostrados pueden no ser los más recientes.', 'info');
+            return null; // Don't try to fetch if offline
         }
-
-
-        // --- CONFIGURACIÓN Y FUNCIONES GLOBALES ---
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0Eo-hHnvVFESGW8LRVBrFGInzEUa6B8H2QDH4-tvac1OhUNBHxwy33WR8wb9vPIK8/exec';
-        let onlineData = {
-            clientes: [],
-            inventario: [],
-            transacciones: []
-        };
-        let offlineData = {
-            clientes: [],
-            inventario: [],
-            transacciones: []
-        };
-        let appInitialized = false;
-
-        function showToast(message, type = 'info') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            if (type === 'success') {
-                toast.style.backgroundColor = '#10B981'; // Green
-            } else if (type === 'error') {
-                toast.style.backgroundColor = '#EF4444'; // Red
-            } else {
-                toast.style.backgroundColor = '#3B82F6'; // Blue
-            }
-            toast.classList.remove('opacity-0');
-            toast.classList.add('opacity-100');
-            setTimeout(() => {
-                toast.classList.remove('opacity-100');
-                toast.classList.add('opacity-0');
-            }, 3000);
+        showLoading(true);
+        const queryParams = new URLSearchParams({ action, ...params }).toString();
+        const response = await fetch(`${SCRIPT_URL}?${queryParams}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-
-        function showLoading(show) {
-            const loadingOverlay = document.getElementById('loadingOverlay');
-            if (show) {
-                loadingOverlay.classList.remove('hidden');
-            } else {
-                loadingOverlay.classList.add('hidden');
-            }
+        const data = await response.json();
+        showLoading(false);
+        if (data.status === 'success') {
+            return data.data;
+        } else {
+            showToast(`Error de API: ${data.message}`, 'error');
+            console.error(`Error de API para acción '${action}':`, data.message); // Más logging
+            return null;
         }
+    } catch (error) {
+        showLoading(false);
+        showToast(`Error al conectar con el servidor para '${action}': ${error.message}`, 'error');
+        console.error(`Error de red/servidor para acción '${action}':`, error); // Más logging
+        return null;
+    }
+}
 
-        // --- FUNCIONES DE INTERACCIÓN CON GOOGLE APPS SCRIPT (API) ---
-        async function fetchData(action, params = {}) {
-            try {
-                if (!navigator.onLine) {
-                    showToast('Estás offline. Los datos mostrados pueden no ser los más recientes.', 'info');
-                    return null; // Don't try to fetch if offline
-                }
-                showLoading(true);
-                const queryParams = new URLSearchParams({ action, ...params }).toString();
-                const response = await fetch(`${SCRIPT_URL}?${queryParams}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                showLoading(false);
-                if (data.status === 'success') {
-                    return data.data;
-                } else {
-                    showToast(`Error de API: ${data.message}`, 'error');
-                    return null;
-                }
-            } catch (error) {
-                showLoading(false);
-                showToast(`Error al conectar con el servidor: ${error.message}`, 'error');
-                return null;
-            }
+async function postData(action, payload) {
+    try {
+        if (!navigator.onLine) {
+            showToast('Estás offline. La acción se guardará localmente para sincronizar.', 'info');
+            await saveOfflineAction({ action, payload });
+            return { status: 'offline_queued', message: 'Acción guardada para sincronizar offline.' };
         }
-
-        async function postData(action, payload) {
-            try {
-                if (!navigator.onLine) {
-                    showToast('Estás offline. La acción se guardará localmente para sincronizar.', 'info');
-                    await saveOfflineAction({ action, payload });
-                    return { status: 'offline_queued', message: 'Acción guardada para sincronizar offline.' };
-                }
-                showLoading(true);
-                const response = await fetch(SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams({ action, payload: JSON.stringify(payload) }).toString(),
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                showLoading(false);
-                if (data.status === 'success') {
-                    showToast(data.message, 'success');
-                    return data;
-                } else {
-                    showToast(`Error de API: ${data.message}`, 'error');
-                    return null;
-                }
-            } catch (error) {
-                showLoading(false);
-                showToast(`Error al conectar con el servidor: ${error.message}`, 'error');
-                return null;
-            }
+        showLoading(true);
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({ action, payload: JSON.stringify(payload) }).toString(),
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-
-        // --- GESTIÓN DE DATOS OFFLINE (IndexedDB) ---
-        const DB_NAME = 'ALESFUN_CRM_DB';
-        const DB_VERSION = 1;
-        const STORE_NAMES = ['clientes', 'inventario', 'transacciones', 'offline_actions'];
-
-        function openDatabase() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    STORE_NAMES.forEach(storeName => {
-                        if (!db.objectStoreNames.contains(storeName)) {
-                            let options = {};
-                            if (storeName === 'offline_actions') {
-                                options = { keyPath: 'id', autoIncrement: true };
-                            } else if (storeName === 'clientes') {
-                                options = { keyPath: 'ID_CLIENTE' }; // Asume que 'ID_CLIENTE' es la clave
-                            } else if (storeName === 'inventario') {
-                                options = { keyPath: 'ID_PRODUCTO' }; // Asume que 'ID_PRODUCTO' es la clave
-                            } else if (storeName === 'transacciones') {
-                                // Para transacciones, si no tienen un ID único y determinista, podrías usar autoIncrement
-                                // o generar un UUID antes de guardar. Por ahora, asumimos que 'ID_TRANSACCION' es la clave.
-                                options = { keyPath: 'ID_TRANSACCION' };
-                            }
-                            db.createObjectStore(storeName, options);
-                        }
-                    });
-                };
-
-                request.onsuccess = (event) => {
-                    resolve(event.target.result);
-                };
-
-                request.onerror = (event) => {
-                    console.error('Error al abrir IndexedDB:', event.target.error);
-                    reject('Error al abrir IndexedDB:', event.target.error);
-                };
-            });
-        }
-
-        async function saveLocalData(storeName, data) {
-            const db = await openDatabase();
-            const tx = db.transaction(storeName, 'readwrite');
-            const store = tx.objectStore(storeName);
-            store.clear(); // Clear previous data
-            data.forEach(item => store.put(item)); // Use put to overwrite if key exists
-            await tx.done;
-        }
-
-        async function loadLocalData(storeName) {
-            const db = await openDatabase();
-            const tx = db.transaction(storeName, 'readonly');
-            const store = tx.objectStore(storeName);
-            const data = await store.getAll();
-            await tx.done;
+        const data = await response.json();
+        showLoading(false);
+        if (data.status === 'success') {
+            showToast(data.message, 'success');
             return data;
+        } else {
+            showToast(`Error de API: ${data.message}`, 'error');
+            console.error(`Error de API para acción POST '${action}':`, data.message); // Más logging
+            return null;
         }
+    } catch (error) {
+        showLoading(false);
+        showToast(`Error al conectar con el servidor para POST '${action}': ${error.message}`, 'error');
+        console.error(`Error de red/servidor para acción POST '${action}':`, error); // Más logging
+        return null;
+    }
+}
 
-        async function saveOfflineAction(action) {
-            const db = await openDatabase();
-            const tx = db.transaction('offline_actions', 'readwrite');
-            const store = tx.objectStore('offline_actions');
-            store.add({ id: Date.now(), timestamp: new Date().toISOString(), ...action }); // Agrega timestamp para depuración
-            await tx.done;
-            showToast('Acción guardada para sincronizar.', 'info');
-        }
+// --- GESTIÓN DE DATOS OFFLINE (IndexedDB) ---
+const DB_NAME = 'ALESFUN_CRM_DB';
+const DB_VERSION = 1; // Mantén la versión si ya creaste la DB, si cambias esquemas, incréméntala.
+const STORE_NAMES = ['clientes', 'inventario', 'transacciones', 'offline_actions'];
 
-        async function getOfflineActions() {
-            const db = await openDatabase();
-            const tx = db.transaction('offline_actions', 'readonly');
-            const store = tx.objectStore('offline_actions');
-            const actions = await store.getAll();
-            await tx.done;
-            return actions;
-        }
+function openDatabase() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        async function clearOfflineActions(ids) {
-            const db = await openDatabase();
-            const tx = db.transaction('offline_actions', 'readwrite');
-            const store = tx.objectStore('offline_actions');
-            for (const id of ids) {
-                store.delete(id);
-            }
-            await tx.done;
-        }
-
-        async function synchronizeData() {
-            if (!navigator.onLine) {
-                showToast('No hay conexión a internet para sincronizar. Operando en modo offline.', 'error');
-                // Intentar cargar datos locales si estamos offline y es la primera carga
-                if (!appInitialized) {
-                    try {
-                        offlineData.clientes = await loadLocalData('clientes');
-                        offlineData.inventario = await loadLocalData('inventario');
-                        offlineData.transacciones = await loadLocalData('transacciones');
-                        showToast('Datos cargados desde el almacenamiento local.', 'info');
-                        // Aquí deberías inicializar la UI con offlineData
-                        // Por ejemplo, renderizar listas de clientes/productos
-                    } catch (e) {
-                        console.error('Error al cargar datos locales en modo offline:', e);
-                        showToast('Error al cargar datos locales.', 'error');
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            STORE_NAMES.forEach(storeName => {
+                if (!db.objectStoreNames.contains(storeName)) {
+                    let options = {};
+                    if (storeName === 'offline_actions') {
+                        options = { keyPath: 'id', autoIncrement: true };
+                    } else if (storeName === 'clientes') {
+                        options = { keyPath: 'ID_CLIENTE' }; 
+                    } else if (storeName === 'inventario') {
+                        options = { keyPath: 'ID_PRODUCTO' }; 
+                    } else if (storeName === 'transacciones') {
+                        options = { keyPath: 'ID_TRANSACCION' }; 
                     }
+                    db.createObjectStore(storeName, options);
                 }
-                return; // Salir si estamos offline
-            }
+            });
+        };
 
-            showLoading(true);
-            showToast('Sincronizando datos...', 'info');
+        request.onsuccess = (event) => {
+            resolve(event.target.result);
+        };
 
-            // 1. Enviar acciones offline pendientes
-            let offlineActions = await getOfflineActions();
-            // --- INICIO DE LA CORRECCIÓN DEL ERROR ---
-            // Aseguramos que offlineActions sea un array, incluso si getOfflineActions devuelve algo inesperado
-            if (!Array.isArray(offlineActions)) {
-                console.error('getOfflineActions no devolvió un array. Reiniciando offlineActions a un array vacío.');
-                offlineActions = [];
-            }
-            // --- FIN DE LA CORRECCIÓN DEL ERROR ---
+        request.onerror = (event) => {
+            console.error('Error al abrir IndexedDB:', event.target.error); // Más logging
+            reject(new Error(`Error al abrir IndexedDB: ${event.target.error.name}`)); // Rechaza con un Error
+        };
+    });
+}
 
-            const successfulActionIds = [];
-            if (offlineActions.length > 0) {
-                showToast(`Enviando ${offlineActions.length} acciones offline pendientes...`, 'info');
-                for (const action of offlineActions) {
-                    try {
-                        const result = await postData(action.action, action.payload);
-                        if (result && result.status === 'success') {
-                            successfulActionIds.push(action.id);
-                        } else if (result && result.status === 'offline_queued') {
-                            // Esta acción se quedó en cola porque postData detectó que nos volvimos a desconectar
-                            // No la marcamos como exitosa para que se reintente en la próxima sincronización
-                            console.warn('Acción offline se volvió a encolar:', action);
-                        } else {
-                            console.error('Fallo al re-enviar acción offline, resultado:', result, 'Acción:', action);
-                        }
-                    } catch (error) {
-                        console.error('Excepción al re-enviar acción offline:', error, 'Acción:', action);
-                    }
-                }
-                if (successfulActionIds.length > 0) {
-                    await clearOfflineActions(successfulActionIds);
-                    showToast(`${successfulActionIds.length} acciones offline sincronizadas.`, 'success');
-                } else if (offlineActions.length > 0) {
-                    showToast('Algunas acciones offline no se pudieron sincronizar. Reintentando más tarde.', 'error');
-                }
-            }
+async function saveLocalData(storeName, data) {
+    let db;
+    try {
+        db = await openDatabase();
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        store.clear(); 
+        data.forEach(item => store.put(item));
+        await tx.done;
+        console.log(`Datos guardados en IndexedDB para ${storeName}:`, data.length); // Más logging
+    } catch (e) {
+        console.error(`Error al guardar datos locales en ${storeName}:`, e);
+    } finally {
+        if (db) db.close(); // Asegurarse de cerrar la base de datos
+    }
+}
 
+async function loadLocalData(storeName) {
+    let db;
+    try {
+        db = await openDatabase();
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const data = await store.getAll();
+        await tx.done;
+        console.log(`Datos cargados de IndexedDB para ${storeName}:`, data.length); // Más logging
+        return data;
+    } catch (e) {
+        console.error(`Error al cargar datos locales de ${storeName}:`, e);
+        return []; // Siempre devuelve un array vacío en caso de error
+    } finally {
+        if (db) db.close(); // Asegurarse de cerrar la base de datos
+    }
+}
 
-            // 2. Descargar todos los datos frescos y actualizar onlineData/localData
-            const fetchedClients = await fetchData('getClientes');
-            const fetchedInventario = await fetchData('getInventario');
-            const fetchedTransacciones = await fetchData('getTransacciones');
+async function saveOfflineAction(action) {
+    let db;
+    try {
+        db = await openDatabase();
+        const tx = db.transaction('offline_actions', 'readwrite');
+        const store = tx.objectStore('offline_actions');
+        store.add({ id: Date.now(), timestamp: new Date().toISOString(), ...action }); 
+        await tx.done;
+        showToast('Acción guardada para sincronizar.', 'info');
+        console.log('Acción offline guardada:', action); // Más logging
+    } catch (e) {
+        console.error('Error al guardar acción offline:', e);
+    } finally {
+        if (db) db.close();
+    }
+}
 
-            let allFetchesSuccessful = true;
+async function getOfflineActions() {
+    let db;
+    try {
+        db = await openDatabase();
+        const tx = db.transaction('offline_actions', 'readonly');
+        const store = tx.objectStore('offline_actions');
+        const actions = await store.getAll();
+        await tx.done;
+        console.log('Acciones offline obtenidas de IndexedDB:', actions); // Muy importante para ver qué devuelve
+        return actions;
+    } catch (e) {
+        console.error('Error al obtener acciones offline de IndexedDB:', e);
+        return []; // *** ASEGURARSE DE SIEMPRE DEVOLVER UN ARRAY ***
+    } finally {
+        if (db) db.close();
+    }
+}
 
-            if (fetchedClients && Array.isArray(fetchedClients)) {
-                onlineData.clientes = fetchedClients;
-                await saveLocalData('clientes', fetchedClients);
-                console.log('Clientes sincronizados:', onlineData.clientes.length);
-            } else {
-                onlineData.clientes = [];
-                console.warn('Fetched clients data was not an array or was null/undefined. Using empty array for clients.');
-                allFetchesSuccessful = false;
-            }
-            
-            if (fetchedInventario && Array.isArray(fetchedInventario)) {
-                onlineData.inventario = fetchedInventario;
-                await saveLocalData('inventario', fetchedInventario);
-                console.log('Inventario sincronizado:', onlineData.inventario.length);
-            } else {
-                onlineData.inventario = [];
-                console.warn('Fetched inventario data was not an array or was null/undefined. Using empty array for inventario.');
-                allFetchesSuccessful = false;
-            }
-
-            if (fetchedTransacciones && Array.isArray(fetchedTransacciones)) {
-                onlineData.transacciones = fetchedTransacciones;
-                await saveLocalData('transacciones', fetchedTransacciones);
-                console.log('Transacciones sincronizadas:', onlineData.transacciones.length);
-            } else {
-                onlineData.transacciones = [];
-                console.warn('Fetched transacciones data was not an array or was null/undefined. Using empty array for transacciones.');
-                allFetchesSuccessful = false;
-            }
-            
-            // Actualizar offlineData con los datos recién sincronizados para asegurar consistencia
-            offlineData.clientes = [...onlineData.clientes];
-            offlineData.inventario = [...onlineData.inventario];
-            offlineData.transacciones = [...onlineData.transacciones];
-
-            showLoading(false);
-            if (allFetchesSuccessful) {
-                showToast('Sincronización completa.', 'success');
-            } else {
-                showToast('Sincronización completada con algunas advertencias.', 'warning');
-            }
-            
-            // Aquí puedes llamar a las funciones que renderizan tus listas
-            // Por ejemplo:
-            // renderClientesList();
-            // renderInventarioList();
-            // renderSomethingElse();
+async function clearOfflineActions(ids) {
+    let db;
+    try {
+        db = await openDatabase();
+        const tx = db.transaction('offline_actions', 'readwrite');
+        const store = tx.objectStore('offline_actions');
+        for (const id of ids) {
+            store.delete(id);
         }
+        await tx.done;
+        console.log('Acciones offline limpiadas:', ids); // Más logging
+    } catch (e) {
+        console.error('Error al limpiar acciones offline:', e);
+    } finally {
+        if (db) db.close();
+    }
+}
 
-        // --- FUNCIONES DE INICIALIZACIÓN DE LA APLICACIÓN ---
-        async function initApp() {
-            showLoading(true);
-            showToast('Iniciando ALESFUN CRM...', 'info');
-
-            // Ocultar la animación Matrix y mostrar el contenido de la app
-            if (matrixBg) {
-                matrixBg.classList.add('hidden');
-            }
-            if (appContent) {
-                appContent.classList.remove('hidden');
-            }
-            
+async function synchronizeData() {
+    if (!navigator.onLine) {
+        showToast('No hay conexión a internet para sincronizar. Operando en modo offline.', 'error');
+        // Intentar cargar datos locales si estamos offline y es la primera carga
+        if (!appInitialized) {
             try {
-                // Sincronizar datos al iniciar
-                await synchronizeData();
+                offlineData.clientes = await loadLocalData('clientes');
+                offlineData.inventario = await loadLocalData('inventario');
+                offlineData.transacciones = await loadLocalData('transacciones');
+                // Actualizar onlineData con los datos offline para que la UI los use si estamos sin conexión
+                onlineData.clientes = [...offlineData.clientes]; 
+                onlineData.inventario = [...offlineData.inventario];
+                onlineData.transacciones = [...offlineData.transacciones];
+                showToast('Datos cargados desde el almacenamiento local.', 'info');
+                console.log('Datos locales cargados para UI offline:', offlineData);
+                // Aquí deberías inicializar la UI con offlineData o onlineData (que ahora es copia de offlineData)
+            } catch (e) {
+                console.error('Error al cargar datos locales en modo offline durante la inicialización:', e);
+                showToast('Error al cargar datos locales para modo offline.', 'error');
+            }
+        }
+        showLoading(false); // Asegurarse de ocultar el loading si se va a operar offline
+        return; // Salir si estamos offline
+    }
 
-                // Si la sincronización inicial falló (ej. sin conexión), intenta cargar desde local
-                if (!navigator.onLine && (!onlineData.clientes.length && !onlineData.inventario.length && !onlineData.transacciones.length)) {
-                    showToast('Cargando datos desde el almacenamiento local...', 'info');
-                    offlineData.clientes = await loadLocalData('clientes');
-                    offlineData.inventario = await loadLocalData('inventario');
-                    offlineData.transacciones = await loadLocalData('transacciones');
-                    // Usa offlineData para inicializar tu UI si no hay onlineData
-                    onlineData.clientes = [...offlineData.clientes]; // Para que el resto de la app use datos aunque sean offline
-                    onlineData.inventario = [...offlineData.inventario];
-                    onlineData.transacciones = [...offlineData.transacciones];
-                    showToast('Datos locales cargados.', 'info');
-                } else if (navigator.onLine && (!onlineData.clientes.length && !onlineData.inventario.length && !onlineData.transacciones.length)) {
-                     // Si estamos online pero no se pudieron obtener datos, mostrar error
-                     showToast('No se pudieron cargar los datos iniciales del servidor. Revisa tu conexión o la API.', 'error');
+    showLoading(true);
+    showToast('Sincronizando datos...', 'info');
+
+    // 1. Enviar acciones offline pendientes
+    let offlineActions = await getOfflineActions();
+    // La línea 611 (aproximadamente) en el index.html original que causaba el error ya está manejada por este console.error y la asignación a []
+    // La consola mostrará: "getOfflineActions no devolvió un array. Reiniciando offlineActions a un array vacío."
+    // Lo más importante es el console.log dentro de getOfflineActions() que te dirá qué *realmente* está retornando.
+    
+    if (!Array.isArray(offlineActions)) { // Esta es la línea que antes (aprox. 611) disparaba el log.
+        console.error('getOfflineActions NO devolvió un array. Reiniciando offlineActions a un array vacío.');
+        offlineActions = []; // Asegura que sea un array vacío para que el bucle no falle.
+    }
+
+    const successfulActionIds = [];
+    if (offlineActions.length > 0) {
+        showToast(`Enviando ${offlineActions.length} acciones offline pendientes...`, 'info');
+        console.log(`Intentando enviar ${offlineActions.length} acciones offline:`, offlineActions); // Log detallado
+        for (const action of offlineActions) {
+            try {
+                // Asegúrate de que la acción y el payload son lo que esperas para postData
+                const result = await postData(action.action, action.payload);
+                if (result && (result.status === 'success' || result.status === 'offline_queued')) { // Si se volvió a encolar, no lo consideramos "exitoso" para limpiar
+                    if (result.status === 'success') {
+                        successfulActionIds.push(action.id);
+                        console.log('Acción offline enviada exitosamente:', action);
+                    } else {
+                        console.warn('Acción offline se volvió a encolar (posiblemente la red se fue de nuevo):', action);
+                    }
+                } else {
+                    console.error('Fallo al re-enviar acción offline, resultado:', result, 'Acción:', action);
                 }
-
-
-                appInitialized = true;
-                showLoading(false);
-                showToast('ALESFUN CRM listo.', 'success');
-
-                // Llama a cualquier función para renderizar la UI inicial aquí
-                // Por ejemplo:
-                // renderVentasTab();
-                // renderRecibosTab();
-                // renderInventarioList(onlineData.inventario); // Pasa los datos a tus funciones de renderizado
-                // renderClientesList(onlineData.clientes);
-                
             } catch (error) {
-                console.error('Error durante la inicialización de la app:', error);
-                showToast('Error crítico al iniciar la aplicación.', 'error');
-                showLoading(false);
-                // Si hay un error crítico, asegúrate de que al menos el contenido de la app se muestre vacío
-                if (appContent) {
-                    appContent.classList.remove('hidden');
-                }
+                console.error('Excepción al re-enviar acción offline:', error, 'Acción:', action);
             }
         }
+        if (successfulActionIds.length > 0) {
+            await clearOfflineActions(successfulActionIds);
+            showToast(`${successfulActionIds.length} acciones offline sincronizadas.`, 'success');
+        } else if (offlineActions.length > 0) {
+            showToast('Algunas acciones offline no se pudieron sincronizar. Reintentando más tarde.', 'error');
+        }
+    }
 
 
-        // --- EVENT LISTENERS GENERALES ---
-        document.addEventListener('DOMContentLoaded', initApp);
-        document.getElementById('syncButton').addEventListener('click', synchronizeData);
+    // 2. Descargar todos los datos frescos y actualizar onlineData/localData
+    console.log('Intentando descargar datos frescos del servidor...');
+    const fetchedClients = await fetchData('getClientes');
+    const fetchedInventario = await fetchData('getInventario');
+    const fetchedTransacciones = await fetchData('getTransacciones');
 
-        // --- GESTIÓN DE PESTAÑAS ---
-        document.getElementById('tabVentas').addEventListener('click', () => showTab('Ventas'));
-        document.getElementById('tabRecibos').addEventListener('click', () => showTab('Recibos'));
-        document.getElementById('tabMasOpciones').addEventListener('click', () => showTab('MasOpciones'));
+    let allFetchesSuccessful = true;
 
-        function showTab(tabName) {
-            // Ocultar todas las secciones principales
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.add('hidden');
-            });
-            // Remover 'active' de todos los botones de pestaña
-            document.querySelectorAll('.tab-button').forEach(button => {
-                button.classList.remove('active');
-            });
+    if (fetchedClients && Array.isArray(fetchedClients)) {
+        onlineData.clientes = fetchedClients;
+        await saveLocalData('clientes', fetchedClients);
+        console.log('Clientes sincronizados:', onlineData.clientes.length);
+    } else {
+        onlineData.clientes = [];
+        console.warn('Fetched clients data was not an array or was null/undefined. Using empty array for clients.');
+        allFetchesSuccessful = false;
+    }
+    
+    if (fetchedInventario && Array.isArray(fetchedInventario)) {
+        onlineData.inventario = fetchedInventario;
+        await saveLocalData('inventario', fetchedInventario);
+        console.log('Inventario sincronizado:', onlineData.inventario.length);
+    } else {
+        onlineData.inventario = [];
+        console.warn('Fetched inventario data was not an array or was null/undefined. Using empty array for inventario.');
+        allFetchesSuccessful = false;
+    }
 
-            // Mostrar la sección y activar el botón correspondiente
-            document.getElementById(`content${tabName}`).classList.remove('hidden');
-            document.getElementById(`tab${tabName}`).classList.add('active');
+    if (fetchedTransacciones && Array.isArray(fetchedTransacciones)) {
+        onlineData.transacciones = fetchedTransacciones;
+        await saveLocalData('transacciones', fetchedTransacciones);
+        console.log('Transacciones sincronizadas:', onlineData.transacciones.length);
+    } else {
+        onlineData.transacciones = [];
+        console.warn('Fetched transacciones data was not an array or was null/undefined. Using empty array for transacciones.');
+        allFetchesSuccessful = false;
+    }
+    
+    // Actualizar offlineData con los datos recién sincronizados para asegurar consistencia
+    offlineData.clientes = [...onlineData.clientes];
+    offlineData.inventario = [...onlineData.inventario];
+    offlineData.transacciones = [...onlineData.transacciones];
 
-            // Si es la pestaña "Más Opciones", ocultar sub-secciones por defecto
-            if (tabName === 'MasOpciones') {
-                document.getElementById('sectionInventario').classList.add('hidden');
-                document.getElementById('sectionClientes').classList.add('hidden');
-                document.getElementById('sectionCierres').classList.add('hidden');
+    showLoading(false);
+    if (allFetchesSuccessful) {
+        showToast('Sincronización completa.', 'success');
+    } else {
+        showToast('Sincronización completada con algunas advertencias. Revisa la consola.', 'warning');
+    }
+    
+    // Llama a las funciones que renderizan tus listas con los datos actualizados
+    renderClientesList(onlineData.clientes); // Suponiendo que tienes esta función
+    renderInventarioList(onlineData.inventario); // Suponiendo que tienes esta función
+    // renderSomethingElse(); 
+}
+
+// --- FUNCIONES DE INICIALIZACIÓN DE LA APLICACIÓN ---
+async function initApp() {
+    showLoading(true);
+    showToast('Iniciando ALESFUN CRM...', 'info');
+
+    // Ocultar la animación Matrix y mostrar el contenido de la app
+    if (matrixBg) {
+        matrixBg.classList.add('hidden');
+    }
+    if (appContent) {
+        appContent.classList.remove('hidden');
+    }
+    
+    try {
+        // Sincronizar datos al iniciar
+        await synchronizeData();
+
+        // Si la sincronización inicial falló (ej. sin conexión) y no hay datos online, intenta cargar desde local
+        if ((!navigator.onLine && (!onlineData.clientes.length && !onlineData.inventario.length && !onlineData.transacciones.length)) || 
+            (navigator.onLine && (!onlineData.clientes.length && !onlineData.inventario.length && !onlineData.transacciones.length) && !appInitialized)) {
+            
+            showToast('Intentando cargar datos desde el almacenamiento local...', 'info');
+            offlineData.clientes = await loadLocalData('clientes');
+            offlineData.inventario = await loadLocalData('inventario');
+            offlineData.transacciones = await loadLocalData('transacciones');
+
+            onlineData.clientes = [...offlineData.clientes]; 
+            onlineData.inventario = [...offlineData.inventario];
+            onlineData.transacciones = [...offlineData.transacciones];
+            
+            showToast('Datos locales cargados para UI.', 'info');
+            console.log('Datos locales cargados para UI:', offlineData);
+
+            if (!onlineData.clientes.length && !onlineData.inventario.length && !onlineData.transacciones.length) {
+                console.warn('La aplicación se inició sin datos (ni online ni offline).');
+                showToast('Advertencia: No se pudieron cargar datos.', 'warning');
             }
         }
+        
+        appInitialized = true;
+        showLoading(false);
+        showToast('ALESFUN CRM listo.', 'success');
 
-        // Listener para botones de Más Opciones
-        document.getElementById('btnGoInventario').addEventListener('click', () => {
-            document.getElementById('sectionInventario').classList.remove('hidden');
-            document.getElementById('sectionClientes').classList.add('hidden');
-            document.getElementById('sectionCierres').classList.add('hidden');
-            // Aquí llamarías a una función para renderizar la tabla de inventario
-            // renderInventarioList(onlineData.inventario);
-        });
+        // Llama a cualquier función para renderizar la UI inicial aquí
+        renderClientesList(onlineData.clientes);
+        renderInventarioList(onlineData.inventario);
+        // showTab('Ventas'); // Puedes establecer una pestaña por defecto
+        
+    } catch (error) {
+        console.error('Error CRÍTICO durante la inicialización de la app:', error);
+        showToast(`Error crítico al iniciar la aplicación: ${error.message}`, 'error');
+        showLoading(false);
+        // Si hay un error crítico, asegúrate de que al menos el contenido de la app se muestre vacío
+        if (appContent) {
+            appContent.classList.remove('hidden');
+        }
+    }
+}
 
-        document.getElementById('btnGoClientes').addEventListener('click', () => {
-            document.getElementById('sectionInventario').classList.add('hidden');
-            document.getElementById('sectionClientes').classList.remove('hidden');
-            document.getElementById('sectionCierres').classList.add('hidden');
-            // Aquí llamarías a una función para renderizar la tabla de clientes
-            // renderClientesList(onlineData.clientes);
-        });
 
-        document.getElementById('btnGoCierres').addEventListener('click', () => {
-            document.getElementById('sectionInventario').classList.add('hidden');
-            document.getElementById('sectionClientes').classList.add('hidden');
-            document.getElementById('sectionCierres').classList.remove('hidden');
-        });
+// --- EVENT LISTENERS GENERALES ---
+document.addEventListener('DOMContentLoaded', initApp);
+document.getElementById('syncButton').addEventListener('click', synchronizeData);
 
-        // --- GESTIÓN DE MODALES ---
-        document.getElementById('closeReceiptModalButton').addEventListener('click', () => {
-            document.getElementById('receiptModal').classList.add('hidden');
-        });
+// --- GESTIÓN DE PESTAÑAS ---
+document.getElementById('tabVentas').addEventListener('click', () => showTab('Ventas'));
+document.getElementById('tabRecibos').addEventListener('click', () => showTab('Recibos'));
+document.getElementById('tabMasOpciones').addEventListener('click', () => showTab('MasOpciones'));
 
-        // Más listeners para tus botones de la UI (ej. btnRegistrarVenta, btnGuardarProducto, etc.)
-        // AUN NO ESTÁN IMPLEMENTADOS EN EL CÓDIGO QUE ME ENVIASTE, PERO DEBERÍAN ESTAR AQUÍ:
+function showTab(tabName) {
+    // Ocultar todas las secciones principales
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    // Remover 'active' de todos los botones de pestaña
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
 
-        // Ejemplo de cómo manejar una búsqueda (para que veas la interacción con tus datos)
-        const ventaClienteSearch = document.getElementById('ventaClienteSearch');
-        const ventaClienteSuggestions = document.getElementById('ventaClienteSuggestions');
-        let selectedClient = null; // Para almacenar el cliente seleccionado
+    // Mostrar la sección y activar el botón correspondiente
+    document.getElementById(`content${tabName}`).classList.remove('hidden');
+    document.getElementById(`tab${tabName}`).classList.add('active');
 
-        ventaClienteSearch.addEventListener('input', () => {
-            const query = ventaClienteSearch.value.toLowerCase();
-            ventaClienteSuggestions.innerHTML = '';
-            if (query.length < 2) {
+    // Si es la pestaña "Más Opciones", ocultar sub-secciones por defecto
+    if (tabName === 'MasOpciones') {
+        document.getElementById('sectionInventario').classList.add('hidden');
+        document.getElementById('sectionClientes').classList.add('hidden');
+        document.getElementById('sectionCierres').classList.add('hidden');
+    }
+}
+
+// Listener para botones de Más Opciones
+document.getElementById('btnGoInventario').addEventListener('click', () => {
+    document.getElementById('sectionInventario').classList.remove('hidden');
+    document.getElementById('sectionClientes').classList.add('hidden');
+    document.getElementById('sectionCierres').classList.add('hidden');
+    renderInventarioList(onlineData.inventario); // Llama a renderizar la tabla de inventario
+});
+
+document.getElementById('btnGoClientes').addEventListener('click', () => {
+    document.getElementById('sectionInventario').classList.add('hidden');
+    document.getElementById('sectionClientes').classList.remove('hidden');
+    document.getElementById('sectionCierres').classList.add('hidden');
+    renderClientesList(onlineData.clientes); // Llama a renderizar la tabla de clientes
+});
+
+document.getElementById('btnGoCierres').addEventListener('click', () => {
+    document.getElementById('sectionInventario').classList.add('hidden');
+    document.getElementById('sectionClientes').classList.add('hidden');
+    document.getElementById('sectionCierres').classList.remove('hidden');
+});
+
+// --- GESTIÓN DE MODALES ---
+document.getElementById('closeReceiptModalButton').addEventListener('click', () => {
+    document.getElementById('receiptModal').classList.add('hidden');
+});
+
+// --- FUNCIONES DE RENDERING DE LISTAS (NECESITARÁS IMPLEMENTAR ESTAS) ---
+// Estas son funciones placeholder. Debes llenarlas con la lógica para dibujar las tablas HTML.
+function renderClientesList(clientes) {
+    const listaClientesBody = document.getElementById('clientesLista');
+    if (!listaClientesBody) return; // Asegúrate de que el elemento existe
+    listaClientesBody.innerHTML = ''; // Limpiar la lista existente
+
+    if (!Array.isArray(clientes) || clientes.length === 0) {
+        listaClientesBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500">No hay clientes registrados.</td></tr>';
+        return;
+    }
+
+    clientes.forEach(cliente => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${cliente.ID_CLIENTE}</td>
+            <td>${cliente.NOMBRE}</td>
+            <td>${cliente.CELULAR || 'N/A'}</td>
+            <td>${parseFloat(cliente.SALDO_ACTUAL || 0).toFixed(2)}</td>
+            <td>
+                <button class="btn-dark text-sm px-2 py-1 mr-1" onclick="editCliente('${cliente.ID_CLIENTE}')">Editar</button>
+            </td>
+        `;
+        listaClientesBody.appendChild(row);
+    });
+}
+
+function renderInventarioList(inventario) {
+    const listaInventarioBody = document.getElementById('inventarioLista');
+    if (!listaInventarioBody) return; // Asegúrate de que el elemento existe
+    listaInventarioBody.innerHTML = ''; // Limpiar la lista existente
+
+    if (!Array.isArray(inventario) || inventario.length === 0) {
+        listaInventarioBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500">No hay productos en inventario.</td></tr>';
+        return;
+    }
+
+    inventario.forEach(producto => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${producto.ID_PRODUCTO}</td>
+            <td>${producto.NOMBRE}</td>
+            <td>${parseFloat(producto.PRECIO || 0).toFixed(2)}</td>
+            <td>${parseInt(producto.STOCK || 0)}</td>
+            <td>
+                <button class="btn-dark text-sm px-2 py-1 mr-1" onclick="editProducto('${producto.ID_PRODUCTO}')">Editar</button>
+                <button class="btn-red text-sm px-2 py-1" onclick="deleteProducto('${producto.ID_PRODUCTO}')">Eliminar</button>
+            </td>
+        `;
+        listaInventarioBody.appendChild(row);
+    });
+}
+
+// Funciones placeholder para editar/eliminar (implementar lógica real)
+function editCliente(id) {
+    console.log('Editar cliente:', id);
+    // Lógica para cargar datos del cliente en el formulario y permitir edición
+    const cliente = onlineData.clientes.find(c => c.ID_CLIENTE == id);
+    if (cliente) {
+        document.getElementById('clienteId').value = cliente.ID_CLIENTE;
+        document.getElementById('clienteNombre').value = cliente.NOMBRE;
+        document.getElementById('clienteCelular').value = cliente.CELULAR;
+        document.getElementById('clienteDireccion').value = cliente.DIRECCION;
+        document.getElementById('clienteCI').value = cliente.CI;
+        document.getElementById('clienteSaldoActual').value = parseFloat(cliente.SALDO_ACTUAL).toFixed(2);
+    }
+}
+
+function deleteCliente(id) {
+    console.log('Eliminar cliente:', id);
+    // Lógica para confirmar y luego llamar a postData('deleteCliente', { ID_CLIENTE: id });
+    // Y luego synchronizeData() y renderClientesList()
+}
+
+
+function editProducto(id) {
+    console.log('Editar producto:', id);
+    // Lógica para cargar datos del producto en el formulario y permitir edición
+    const producto = onlineData.inventario.find(p => p.ID_PRODUCTO == id);
+    if (producto) {
+        document.getElementById('inventarioIdProducto').value = producto.ID_PRODUCTO;
+        document.getElementById('inventarioNombreProducto').value = producto.NOMBRE;
+        document.getElementById('inventarioPrecio').value = parseFloat(producto.PRECIO).toFixed(2);
+        document.getElementById('inventarioStock').value = parseInt(producto.STOCK);
+    }
+}
+
+async function deleteProducto(id) {
+    console.log('Eliminar producto:', id);
+    if (confirm('¿Estás seguro de que quieres eliminar este producto?')) { // Considerar reemplazar con modal personalizado
+        const result = await postData('deleteProducto', { ID_PRODUCTO: id });
+        if (result && result.status === 'success') {
+            await synchronizeData();
+            showToast('Producto eliminado exitosamente.', 'success');
+        } else {
+            showToast('Fallo al eliminar producto.', 'error');
+        }
+    }
+}
+
+
+// --- Lógica de Ventas / Pagos ---
+const ventaClienteSearch = document.getElementById('ventaClienteSearch');
+const ventaClienteSuggestions = document.getElementById('ventaClienteSuggestions');
+let selectedClient = null; // Para almacenar el cliente seleccionado
+
+ventaClienteSearch.addEventListener('input', () => {
+    const query = ventaClienteSearch.value.toLowerCase();
+    ventaClienteSuggestions.innerHTML = '';
+    if (query.length < 2) {
+        ventaClienteSuggestions.classList.add('hidden');
+        selectedClient = null; // Limpiar cliente si la búsqueda es muy corta
+        document.getElementById('ventaClienteId').textContent = '';
+        document.getElementById('ventaClienteNombre').textContent = '';
+        document.getElementById('ventaClienteSaldo').textContent = '';
+        return;
+    }
+
+    const filteredClients = onlineData.clientes.filter(client =>
+        client.NOMBRE.toLowerCase().includes(query) ||
+        client.ID_CLIENTE.toString().toLowerCase().includes(query) // Asegurarse de comparar como string
+    );
+
+    if (filteredClients.length > 0) {
+        ventaClienteSuggestions.classList.remove('hidden');
+        filteredClients.forEach(client => {
+            const div = document.createElement('div');
+            div.classList.add('p-2', 'cursor-pointer', 'hover:bg-gray-700');
+            div.textContent = `${client.NOMBRE} (ID: ${client.ID_CLIENTE}) - Saldo: ${parseFloat(client.SALDO_ACTUAL || 0).toFixed(2)}`;
+            div.addEventListener('click', () => {
+                selectedClient = client;
+                document.getElementById('ventaClienteId').textContent = client.ID_CLIENTE;
+                document.getElementById('ventaClienteNombre').textContent = client.NOMBRE;
+                document.getElementById('ventaClienteSaldo').textContent = parseFloat(client.SALDO_ACTUAL || 0).toFixed(2);
+                ventaClienteSearch.value = client.NOMBRE; // Auto-rellenar
                 ventaClienteSuggestions.classList.add('hidden');
-                return;
-            }
-
-            const filteredClients = onlineData.clientes.filter(client =>
-                client.Nombre.toLowerCase().includes(query) ||
-                client.ID_CLIENTE.toString().includes(query)
-            );
-
-            if (filteredClients.length > 0) {
-                ventaClienteSuggestions.classList.remove('hidden');
-                filteredClients.forEach(client => {
-                    const div = document.createElement('div');
-                    div.classList.add('p-2', 'cursor-pointer', 'hover:bg-gray-700');
-                    div.textContent = `${client.Nombre} (ID: ${client.ID_CLIENTE}) - Saldo: ${client.SaldoActual}`;
-                    div.addEventListener('click', () => {
-                        selectedClient = client;
-                        document.getElementById('ventaClienteId').textContent = client.ID_CLIENTE;
-                        document.getElementById('ventaClienteNombre').textContent = client.Nombre;
-                        document.getElementById('ventaClienteSaldo').textContent = parseFloat(client.SaldoActual).toFixed(2);
-                        ventaClienteSearch.value = client.Nombre; // Auto-rellenar
-                        ventaClienteSuggestions.classList.add('hidden');
-                        // Aquí deberías también actualizar el cálculo de venta/pago
-                    });
-                    ventaClienteSuggestions.appendChild(div);
-                });
-            } else {
-                ventaClienteSuggestions.classList.add('hidden');
-            }
+                // Aquí deberías también actualizar el cálculo de venta/pago
+            });
+            ventaClienteSuggestions.appendChild(div);
         });
+    } else {
+        ventaClienteSuggestions.classList.add('hidden');
+    }
+});
 
-        // Ejemplo de manejo para el botón de Registrar Venta/Pago
-        document.getElementById('btnRegistrarVenta').addEventListener('click', async () => {
-            if (!selectedClient) {
-                showToast('Por favor, selecciona un cliente primero.', 'error');
-                return;
-            }
-            const montoPago = parseFloat(document.getElementById('ventaMontoPago').value);
-            if (isNaN(montoPago) || montoPago <= 0) {
-                showToast('Introduce un monto de pago válido.', 'error');
-                return;
-            }
+// Ejemplo de manejo para el botón de Registrar Venta/Pago
+document.getElementById('btnRegistrarVenta').addEventListener('click', async () => {
+    if (!selectedClient) {
+        showToast('Por favor, selecciona un cliente primero.', 'error');
+        return;
+    }
+    const montoPagoInput = document.getElementById('ventaMontoPago');
+    const montoPago = parseFloat(montoPagoInput.value);
+    if (isNaN(montoPago) || montoPago <= 0) {
+        showToast('Introduce un monto de pago válido.', 'error');
+        return;
+    }
 
-            // Aquí deberías obtener los productos seleccionados y el total de la venta
-            // Por ahora, solo registramos un pago simple
-            const payload = {
-                ID_CLIENTE: selectedClient.ID_CLIENTE,
-                Tipo: 'Pago', // O 'Venta' si se registran productos
-                Monto: montoPago,
-                Fecha: new Date().toISOString(),
-                // ...otros detalles como productos, cambio, etc.
-            };
+    const soloPagoACuenta = document.getElementById('soloPagoACuenta').checked;
+    
+    // Calcular el nuevo saldo del cliente
+    const saldoActualCliente = parseFloat(selectedClient.SALDO_ACTUAL || 0);
+    let nuevoSaldoCliente = saldoActualCliente;
+    let tipoTransaccion = 'PAGO'; // Por defecto es un pago
+    let descripcionTransaccion = `PAGO A CUENTA por ${montoPago.toFixed(2)}`;
 
-            const result = await postData('addTransaccion', payload);
-            if (result && (result.status === 'success' || result.status === 'offline_queued')) {
-                showToast('Transacción registrada exitosamente (o en cola offline).', 'success');
-                // Aquí deberías limpiar el formulario y actualizar los saldos en la UI
-                // y volver a sincronizar para obtener los datos más recientes
-                await synchronizeData(); // Re-sincronizar después de un POST exitoso
-            }
+    // Si no es solo pago a cuenta, asume que es una venta y los productos deberían afectar el saldo.
+    // Aquí necesitarías la lógica para sumar el total de los productos seleccionados.
+    // Por simplicidad, si no hay productos seleccionados, lo tratamos como pago a cuenta
+    // Si tienes lógica de productos, deberías añadirla aquí para calcular el total de la venta.
+    const totalVentaProductos = 0; // <<< Debes calcular esto de tus productos seleccionados
+    if (!soloPagoACuenta && totalVentaProductos > 0) { // Si hay productos y no es solo pago a cuenta
+        tipoTransaccion = 'VENTA';
+        descripcionTransaccion = `VENTA de productos por ${totalVentaProductos.toFixed(2)}`;
+        nuevoSaldoCliente = saldoActualCliente + totalVentaProductos - montoPago; // La venta aumenta deuda, el pago la reduce
+    } else { // Si solo es pago a cuenta o no hay productos en la venta
+        nuevoSaldoCliente = saldoActualCliente - montoPago; // Un pago siempre reduce el saldo adeudado
+    }
+
+    const payload = {
+        ID_CLIENTE: selectedClient.ID_CLIENTE,
+        TIPO: tipoTransaccion,
+        DESCRIPCION: descripcionTransaccion,
+        MONTO: (tipoTransaccion === 'VENTA' ? totalVentaProductos : montoPago), // Monto total de la transacción
+        MONTO_RECIBIDO: montoPago, // El efectivo real recibido
+        CAMBIO_DADO: Math.max(0, montoPago - (tipoTransaccion === 'VENTA' ? totalVentaProductos : montoPago)), // Calcula cambio
+        SALDO_ANTERIOR: saldoActualCliente,
+        SALDO_NUEVO: nuevoSaldoCliente
+    };
+
+    const result = await postData('addTransaction', payload); // Cambiado a 'addTransaction' como en tu Apps Script
+    if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+        showToast('Transacción registrada exitosamente (o en cola offline).', 'success');
+        
+        // Actualizar el saldo del cliente en la hoja "Clientes"
+        const updateSaldoPayload = {
+            ID_CLIENTE: selectedClient.ID_CLIENTE,
+            SALDO_ACTUAL: nuevoSaldoCliente
+        };
+        const updateSaldoResult = await postData('updateClienteSaldo', updateSaldoPayload); // Llama a la función de Apps Script para actualizar saldo
+        
+        if (updateSaldoResult && updateSaldoResult.status === 'success') {
+            showToast('Saldo del cliente actualizado.', 'success');
+        } else {
+            showToast('Fallo al actualizar el saldo del cliente.', 'error');
+            console.error('Error al actualizar saldo del cliente:', updateSaldoResult);
+        }
+
+        // Limpiar el formulario y re-sincronizar los datos globales
+        // Esto también refrescará la UI si se llaman a las funciones de renderizado
+        document.getElementById('ventaMontoPago').value = '';
+        selectedClient = null;
+        document.getElementById('ventaClienteId').textContent = '';
+        document.getElementById('ventaClienteNombre').textContent = '';
+        document.getElementById('ventaClienteSaldo').textContent = '';
+        document.getElementById('ventaTotalPagar').textContent = '0.00';
+        document.getElementById('ventaSaldoPendienteVenta').textContent = '0.00';
+        document.getElementById('ventaCambio').textContent = '0.00';
+        document.getElementById('ventaNuevoSaldoCliente').textContent = '0.00';
+        document.getElementById('soloPagoACuenta').checked = false;
+        // Limpiar productos seleccionados aquí también si los tienes
+        document.getElementById('productosSeleccionados').innerHTML = '';
+
+
+        await synchronizeData(); // Re-sincronizar después de un POST exitoso
+    }
+});
+
+
+// Lógica para Generar Recibo (Texto) - Adaptada para usar los datos globales
+document.getElementById('btnGenerarReciboTexto').addEventListener('click', async () => {
+    const reciboClienteId = document.getElementById('reciboClienteId').textContent;
+    if (!reciboClienteId) {
+        showToast('Por favor, selecciona un cliente para generar el recibo.', 'error');
+        return;
+    }
+
+    const cliente = onlineData.clientes.find(c => c.ID_CLIENTE == reciboClienteId);
+    if (!cliente) {
+        showToast('Cliente no encontrado en los datos actuales.', 'error');
+        return;
+    }
+
+    // Filtrar las transacciones del cliente
+    const clientTransactions = onlineData.transacciones
+        .filter(t => t.ID_CLIENTE == reciboClienteId)
+        .sort((a, b) => new Date(a.FECHA) - new Date(b.FECHA)); // Ordenar por fecha
+
+    let receiptText = `--- Recibo ALESFUN CRM ---\n`;
+    receiptText += `Fecha Emisión: ${new Date().toLocaleDateString('es-ES')}\n\n`;
+    receiptText += `Cliente ID: ${cliente.ID_CLIENTE}\n`;
+    receiptText += `Nombre: ${cliente.NOMBRE}\n`;
+    receiptText += `Celular: ${cliente.CELULAR || 'N/A'}\n`;
+    receiptText += `Saldo Actual: ${parseFloat(cliente.SALDO_ACTUAL || 0).toFixed(2)}\n\n`;
+    receiptText += `--- Historial de Movimientos ---\n`;
+
+    if (clientTransactions.length > 0) {
+        clientTransactions.slice(-6).forEach(t => { // Últimos 6 movimientos
+            receiptText += `\nFecha: ${new Date(t.FECHA).toLocaleDateString('es-ES')} ${new Date(t.FECHA).toLocaleTimeString('es-ES')}\n`;
+            receiptText += `Tipo: ${t.TIPO}\n`;
+            receiptText += `Descripción: ${t.DESCRIPCION}\n`;
+            receiptText += `Monto Transacción: ${parseFloat(t.MONTO || 0).toFixed(2)}\n`;
+            receiptText += `Monto Recibido: ${parseFloat(t.MONTO_RECIBIDO || 0).toFixed(2)}\n`;
+            receiptText += `Cambio Dado: ${parseFloat(t.CAMBIO_DADO || 0).toFixed(2)}\n`;
+            receiptText += `Saldo Anterior: ${parseFloat(t.SALDO_ANTERIOR || 0).toFixed(2)}\n`;
+            receiptText += `Saldo Nuevo: ${parseFloat(t.SALDO_NUEVO || 0).toFixed(2)}\n`;
+            receiptText += `--------------------\n`;
         });
+    } else {
+        receiptText += "No hay movimientos recientes para este cliente.\n";
+    }
 
-        // ... Y así sucesivamente para todos tus botones y lógicas de gestión ...
+    receiptText += `\n--- Gracias por tu confianza ---`;
 
-    </script>
-</body>
-</html>
+    document.getElementById('receiptTextOutput').textContent = receiptText;
+    document.getElementById('receiptModal').classList.remove('hidden');
+});
+
+document.getElementById('copyReceiptButton').addEventListener('click', () => {
+    const receiptText = document.getElementById('receiptTextOutput').textContent;
+    try {
+        // Usa execCommand('copy') como fallback por si navigator.clipboard no funciona en iframes
+        const textarea = document.createElement('textarea');
+        textarea.value = receiptText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('Recibo copiado al portapapeles.', 'success');
+    } catch (err) {
+        console.error('Error al copiar recibo al portapapeles:', err);
+        showToast('Fallo al copiar recibo.', 'error');
+    }
+});
+
+// Lógica para Generar Recibo (PDF)
+document.getElementById('btnGenerarReciboPDF').addEventListener('click', async () => {
+    const reciboClienteId = document.getElementById('reciboClienteId').textContent;
+    if (!reciboClienteId) {
+        showToast('Por favor, selecciona un cliente para generar el recibo PDF.', 'error');
+        return;
+    }
+
+    showToast('Generando recibo PDF...', 'info');
+    const result = await fetchData('generateReciboPDF', { clientId: reciboClienteId });
+    if (result && result.url) {
+        window.open(result.url, '_blank'); // Abrir el PDF en una nueva pestaña
+        showToast('Recibo PDF generado.', 'success');
+    } else {
+        showToast('Fallo al generar recibo PDF.', 'error');
+    }
+});
+
+// Lógica para el buscador de clientes en Recibos
+const reciboClienteSearch = document.getElementById('reciboClienteSearch');
+const reciboClienteSuggestions = document.getElementById('reciboClienteSuggestions');
+let selectedReciboClient = null;
+
+reciboClienteSearch.addEventListener('input', () => {
+    const query = reciboClienteSearch.value.toLowerCase();
+    reciboClienteSuggestions.innerHTML = '';
+    if (query.length < 2) {
+        reciboClienteSuggestions.classList.add('hidden');
+        selectedReciboClient = null;
+        document.getElementById('reciboClienteId').textContent = '';
+        document.getElementById('reciboClienteNombre').textContent = '';
+        document.getElementById('reciboClienteSaldo').textContent = '';
+        return;
+    }
+
+    const filteredClients = onlineData.clientes.filter(client =>
+        client.NOMBRE.toLowerCase().includes(query) ||
+        client.ID_CLIENTE.toString().toLowerCase().includes(query)
+    );
+
+    if (filteredClients.length > 0) {
+        reciboClienteSuggestions.classList.remove('hidden');
+        filteredClients.forEach(client => {
+            const div = document.createElement('div');
+            div.classList.add('p-2', 'cursor-pointer', 'hover:bg-gray-700');
+            div.textContent = `${client.NOMBRE} (ID: ${client.ID_CLIENTE}) - Saldo: ${parseFloat(client.SALDO_ACTUAL || 0).toFixed(2)}`;
+            div.addEventListener('click', () => {
+                selectedReciboClient = client;
+                document.getElementById('reciboClienteId').textContent = client.ID_CLIENTE;
+                document.getElementById('reciboClienteNombre').textContent = client.NOMBRE;
+                document.getElementById('reciboClienteSaldo').textContent = parseFloat(client.SALDO_ACTUAL || 0).toFixed(2);
+                reciboClienteSearch.value = client.NOMBRE;
+                reciboClienteSuggestions.classList.add('hidden');
+            });
+            reciboClienteSuggestions.appendChild(div);
+        });
+    } else {
+        reciboClienteSuggestions.classList.add('hidden');
+    }
+});
+
+// Lógica para guardar/actualizar cliente (en Más Opciones -> Gestión de Clientes)
+document.getElementById('btnGuardarCliente').addEventListener('click', async () => {
+    const clienteId = document.getElementById('clienteId').value.trim();
+    const nombre = document.getElementById('clienteNombre').value.trim();
+    const celular = document.getElementById('clienteCelular').value.trim();
+    const direccion = document.getElementById('clienteDireccion').value.trim();
+    const ci = document.getElementById('clienteCI').value.trim();
+    const saldoActual = parseFloat(document.getElementById('clienteSaldoActual').value);
+
+    if (!clienteId || !nombre) {
+        showToast('ID y Nombre del cliente son obligatorios.', 'error');
+        return;
+    }
+    if (isNaN(saldoActual)) {
+        showToast('El saldo actual debe ser un número.', 'error');
+        return;
+    }
+
+    const payload = {
+        ID_CLIENTE: clienteId,
+        NOMBRE: nombre,
+        CELULAR: celular,
+        DIRECCION: direccion,
+        CI: ci,
+        SALDO_ACTUAL: saldoActual
+    };
+
+    const existingClient = onlineData.clientes.find(c => c.ID_CLIENTE === clienteId);
+    if (existingClient) {
+        showToast('Ya existe un cliente con ese ID. Usa "Actualizar Cliente".', 'error');
+        return;
+    }
+
+    const result = await postData('addCliente', payload);
+    if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+        showToast('Cliente guardado exitosamente (o en cola offline).', 'success');
+        await synchronizeData(); // Re-sincronizar para refrescar la lista
+        document.getElementById('clienteId').value = '';
+        document.getElementById('clienteNombre').value = '';
+        document.getElementById('clienteCelular').value = '';
+        document.getElementById('clienteDireccion').value = '';
+        document.getElementById('clienteCI').value = '';
+        document.getElementById('clienteSaldoActual').value = '0.00';
+    } else {
+        showToast('Fallo al guardar cliente.', 'error');
+    }
+});
+
+document.getElementById('btnActualizarCliente').addEventListener('click', async () => {
+    const clienteId = document.getElementById('clienteId').value.trim();
+    const nombre = document.getElementById('clienteNombre').value.trim();
+    const celular = document.getElementById('clienteCelular').value.trim();
+    const direccion = document.getElementById('clienteDireccion').value.trim();
+    const ci = document.getElementById('clienteCI').value.trim();
+    const saldoActual = parseFloat(document.getElementById('clienteSaldoActual').value);
+
+    if (!clienteId) {
+        showToast('El ID del cliente es obligatorio para actualizar.', 'error');
+        return;
+    }
+    if (isNaN(saldoActual)) {
+        showToast('El saldo actual debe ser un número.', 'error');
+        return;
+    }
+
+    const payload = {
+        ID_CLIENTE: clienteId,
+        NOMBRE: nombre,
+        CELULAR: celular,
+        DIRECCION: direccion,
+        CI: ci,
+        SALDO_ACTUAL: saldoActual
+    };
+
+    const result = await postData('updateCliente', payload);
+    if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+        showToast('Cliente actualizado exitosamente (o en cola offline).', 'success');
+        await synchronizeData(); // Re-sincronizar para refrescar la lista
+    } else {
+        showToast('Fallo al actualizar cliente.', 'error');
+    }
+});
+
+document.getElementById('btnLimpiarCliente').addEventListener('click', () => {
+    document.getElementById('clienteId').value = '';
+    document.getElementById('clienteNombre').value = '';
+    document.getElementById('clienteCelular').value = '';
+    document.getElementById('clienteDireccion').value = '';
+    document.getElementById('clienteCI').value = '';
+    document.getElementById('clienteSaldoActual').value = '0.00';
+});
+
+
+// Lógica para guardar/actualizar producto (en Más Opciones -> Gestión de Inventario)
+document.getElementById('btnGuardarProducto').addEventListener('click', async () => {
+    const idProducto = document.getElementById('inventarioIdProducto').value.trim();
+    const nombreProducto = document.getElementById('inventarioNombreProducto').value.trim();
+    const precio = parseFloat(document.getElementById('inventarioPrecio').value);
+    const stock = parseInt(document.getElementById('inventarioStock').value);
+
+    if (!idProducto || !nombreProducto || isNaN(precio) || isNaN(stock)) {
+        showToast('Todos los campos de producto son obligatorios.', 'error');
+        return;
+    }
+
+    const payload = {
+        ID_PRODUCTO: idProducto,
+        NOMBRE: nombreProducto,
+        PRECIO: precio,
+        STOCK: stock
+    };
+
+    const existingProduct = onlineData.inventario.find(p => p.ID_PRODUCTO === idProducto);
+    if (existingProduct) {
+        showToast('Ya existe un producto con ese ID. Usa "Actualizar Producto".', 'error');
+        return;
+    }
+
+    const result = await postData('addProducto', payload);
+    if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+        showToast('Producto guardado exitosamente (o en cola offline).', 'success');
+        await synchronizeData();
+        // Limpiar formulario
+        document.getElementById('inventarioIdProducto').value = '';
+        document.getElementById('inventarioNombreProducto').value = '';
+        document.getElementById('inventarioPrecio').value = '';
+        document.getElementById('inventarioStock').value = '';
+    } else {
+        showToast('Fallo al guardar producto.', 'error');
+    }
+});
+
+document.getElementById('btnActualizarProducto').addEventListener('click', async () => {
+    const idProducto = document.getElementById('inventarioIdProducto').value.trim();
+    const nombreProducto = document.getElementById('inventarioNombreProducto').value.trim();
+    const precio = parseFloat(document.getElementById('inventarioPrecio').value);
+    const stock = parseInt(document.getElementById('inventarioStock').value);
+
+    if (!idProducto || !nombreProducto || isNaN(precio) || isNaN(stock)) {
+        showToast('Todos los campos de producto son obligatorios.', 'error');
+        return;
+    }
+
+    const payload = {
+        ID_PRODUCTO: idProducto,
+        NOMBRE: nombreProducto,
+        PRECIO: precio,
+        STOCK: stock
+    };
+
+    const result = await postData('updateProducto', payload);
+    if (result && (result.status === 'success' || result.status === 'offline_queued')) {
+        showToast('Producto actualizado exitosamente (o en cola offline).', 'success');
+        await synchronizeData();
+    } else {
+        showToast('Fallo al actualizar producto.', 'error');
+    }
+});
+
+document.getElementById('btnLimpiarInventario').addEventListener('click', () => {
+    document.getElementById('inventarioIdProducto').value = '';
+    document.getElementById('inventarioNombreProducto').value = '';
+    document.getElementById('inventarioPrecio').value = '';
+    document.getElementById('inventarioStock').value = '';
+});
+
+
+// --- Lógica de Cierres de Caja ---
+document.getElementById('btnConsultarCierres').addEventListener('click', async () => {
+    const startDate = document.getElementById('cierresFechaInicio').value;
+    const endDate = document.getElementById('cierresFechaFin').value;
+
+    if (!startDate || !endDate) {
+        showToast('Selecciona un rango de fechas para consultar el cierre.', 'error');
+        return;
+    }
+
+    showToast('Consultando cierre de caja...', 'info');
+    const result = await fetchData('getCierreCaja', { startDate, endDate });
+
+    const resultadosCierresDiv = document.getElementById('resultadosCierres');
+    if (result && result.data) {
+        document.getElementById('cierreSaldoInicial').textContent = parseFloat(result.data.saldoInicial).toFixed(2);
+        document.getElementById('cierreTotalEntradas').textContent = parseFloat(result.data.totalEntradas).toFixed(2);
+        document.getElementById('cierreTotalVentas').textContent = parseFloat(result.data.totalVentas).toFixed(2);
+        document.getElementById('cierreSaldoFinal').textContent = parseFloat(result.data.saldoFinal).toFixed(2);
+        resultadosCierresDiv.classList.remove('hidden');
+        showToast('Cierre de caja consultado exitosamente.', 'success');
+    } else {
+        resultadosCierresDiv.classList.add('hidden');
+        showToast('No se encontraron datos de cierre para el rango seleccionado o hubo un error.', 'error');
+    }
+});
+
+document.getElementById('btnExportarCierresPDF').addEventListener('click', async () => {
+    const startDate = document.getElementById('cierresFechaInicio').value;
+    const endDate = document.getElementById('cierresFechaFin').value;
+
+    if (!startDate || !endDate) {
+        showToast('Selecciona un rango de fechas para exportar el cierre PDF.', 'error');
+        return;
+    }
+
+    showToast('Generando cierre PDF...', 'info');
+    const result = await fetchData('generateCierrePDF', { startDate, endDate });
+    if (result && result.url) {
+        window.open(result.url, '_blank'); // Abrir el PDF en una nueva pestaña
+        showToast('Cierre PDF generado.', 'success');
+    } else {
+        showToast('Fallo al generar cierre PDF.', 'error');
+    }
+});
+
+document.getElementById('btnLimpiarCierres').addEventListener('click', () => {
+    document.getElementById('cierresFechaInicio').value = '';
+    document.getElementById('cierresFechaFin').value = '';
+    document.getElementById('resultadosCierres').classList.add('hidden');
+});
+
