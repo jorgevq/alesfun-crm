@@ -1,0 +1,210 @@
+/* src/styles/global.css */
+
+/* ¡ESTAS TRES LÍNEAS SON CRUCIALES PARA TAILWIND CSS Y DEBEN IR PRIMERO! */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Importar fuente Orbitron de Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+/* Si usas Inter en algún lugar más allá de los componentes que ya lo importan, podrías añadirlo aquí: */
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'); */
+
+
+/* Reset básico para asegurar consistencia en navegadores */
+html, body {
+    margin: 0;
+    padding: 0;
+    /* Se recomienda Inter o una fuente más legible para el cuerpo del texto si Orbitron es solo para títulos */
+    font-family: 'Inter', sans-serif; /* Cambiado a Inter para el cuerpo del texto, si no está ya en tu configuración de Tailwind */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #000000 !important; /* Negro puro */
+    color: #e0e0e0; /* Color de texto por defecto para asegurar legibilidad */
+    height: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box; /* Añadido para consistencia global */
+    /* Asegura que el scroll sea suave */
+    scroll-behavior: smooth;
+}
+
+#app {
+    height: 100% !important;
+    width: 100% !important;
+    background-color: #000000; /* Fondo negro para el elemento raíz de la app */
+}
+
+/* Estilo para los títulos principales (H1, H2) o clases específicas que deben usar Orbitron */
+h1, h2, h3, .app-title, .app-subtitle-orbitron, .page-title, .section-title {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    color: inherit; /* Hereda el color para mayor flexibilidad */
+}
+
+/* REGLA CRÍTICA: Reset para todos los SVGs.
+   Esto asegura que no haya estilos base inesperados de navegadores o librerías.
+   Tailwind y los atributos directos del SVG lo sobrescribirán.
+   Se quita el !important de stroke-width, width y height para que las clases de Tailwind
+   o los estilos específicos de los componentes puedan definir su grosor y tamaño.
+*/
+svg {
+    display: inline-block !important; /* Asegura que el SVG se comporte como un elemento de línea con bloque */
+    vertical-align: middle !important; /* Alinea los iconos con el texto si están juntos */
+    width: 1.25rem; /* Equivale a w-5, tamaño base para iconos, sin !important */
+    height: 1.25rem; /* Equivale a h-5, tamaño base para iconos, sin !important */
+    overflow: visible !important; /* Asegura que los strokes no se corten */
+    fill: currentColor !important; /* Permite que el color del texto afecte el color del SVG */
+    stroke: currentColor !important; /* Permite que el color del texto afecte el color del borde del SVG */
+    stroke-width: 0; /* Por defecto, sin !important */
+}
+
+/* Estilos para la animación de sincronización tipo Matrix (si se usa) */
+.sync-animation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  color: #00BFFF;
+  font-family: 'monospace', 'Orbitron', sans-serif;
+  font-size: 1.5em;
+  overflow: hidden;
+}
+
+.sync-animation-overlay p {
+  margin-top: 20px;
+  font-size: 0.8em;
+  color: #87CEEB;
+}
+
+/* Animación de números cayendo (simplificada, una versión "Matrix" completa es compleja) */
+@keyframes matrix-fall {
+  0% { transform: translateY(-100%); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+.matrix-line {
+  position: absolute;
+  white-space: nowrap;
+  animation: matrix-fall linear infinite;
+  animation-duration: var(--animation-duration);
+  left: var(--left-position);
+  font-size: var(--font-size);
+  color: var(--line-color);
+}
+
+/* Ajustes para los elementos de la lista de navegación en el sidebar */
+aside nav ul li {
+  font-size: 1.2rem; /* Aumenta el tamaño de la fuente */
+  line-height: 2; /* Aumenta el interlineado para mayor espacio */
+  margin-bottom: 0.75rem; /* Mayor margen inferior para separar los elementos */
+  /* Eliminado: font-weight: bold; para permitir control con Tailwind */
+}
+
+/* Asegura que el color de los enlaces sea blanco por defecto para un contraste óptimo y sin subrayado */
+aside nav ul li a {
+  color: white;
+  text-decoration: none; /* Elimina el subrayado de los enlaces del menú */
+}
+
+/* Ajuste del tamaño de los iconos dentro de los enlaces del menú */
+aside nav ul li a svg {
+  width: 30px; /* Aumenta el tamaño del icono a 30px */
+  height: 30px; /* Aumenta el tamaño del icono a 30px */
+}
+
+/* REGLA CSS DIRECTA PARA EL ASIDE CON FONDO GRIS TRANSLÚCIDO TIPO WINDOWS 11 */
+aside {
+  background-color: rgba(
+    45,
+    45,
+    45,
+    0.85
+  ) !important; /* Gris oscuro con 85% de opacidad */
+  backdrop-filter: blur(
+    8px
+  ); /* Efecto de desenfoque para simular el "Mica" de Windows 11 */
+  -webkit-backdrop-filter: blur(
+    8px
+  ); /* Para compatibilidad con navegadores WebKit */
+}
+
+/* En pantallas grandes (desktop), la barra lateral siempre debe estar visible por defecto y no empujar el contenido */
+@media (min-width: 768px) {
+  aside {
+    transform: translateX(
+      0
+    ); /* Eliminado !important para permitir la transición */
+    /* Ancho fijo en desktop para que el main pueda tener un margin-left - definido con md:w-[280px] en el template */
+  }
+  /* El margin-left para 'main' ahora se aplica condicionalmente en el template con :class */
+}
+/* Animación de giro para el icono de sincronización (se mantiene el estilo por si se usa en otro lugar) */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/*
+ * =======================================================
+ * Estilos para el Indicador de Carga (Spinner)
+ * Se usan para mostrar una animación mientras se procesan
+ * transacciones importantes.
+ * =======================================================
+ */
+
+/* Contenedor del indicador de carga */
+.loading-indicator {
+  /* Posicionamiento y diseño del overlay */
+  position: fixed; /* Fija la posición en la ventana de visualización */
+  top: 0;
+  left: 0;
+  width: 100%; /* Ocupa todo el ancho de la pantalla */
+  height: 100%; /* Ocupa todo el alto de la pantalla */
+  background-color: rgba(0, 0, 0, 0.7); /* Fondo semi-transparente oscuro */
+  display: flex; /* Usa flexbox para centrar el contenido */
+  flex-direction: column; /* Apila el spinner y el texto verticalmente */
+  justify-content: center; /* Centra el contenido verticalmente */
+  align-items: center; /* Centra el contenido horizontalmente */
+  color: #fff; /* Color del texto del indicador */
+  z-index: 1000; /* Asegura que esté encima de otros elementos */
+  font-family: 'Orbitron', sans-serif; /* Aplica la fuente del título */
+  backdrop-filter: blur(5px); /* Efecto de desenfoque en el fondo */
+  -webkit-backdrop-filter: blur(5px);
+}
+
+/* Estilos para el spinner (el círculo que gira) */
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f3f3f3; /* Color claro para el borde exterior */
+  border-top: 4px solid #3498db; /* Color del borde que gira */
+  border-radius: 50%; /* Hace el elemento circular */
+  animation: spin 1s linear infinite; /* Aplica la animación de giro */
+  margin-bottom: 1rem; /* Espacio entre el spinner y el texto */
+}
+
+/* Define la animación de giro */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
