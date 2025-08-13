@@ -57,6 +57,12 @@
             <span class="item-value">{{ totalDebtors }}</span>
           </div>
           <div class="summary-item">
+            <span class="item-label">Cuentas por Cobrar:</span>
+            <span class="item-value">{{
+              formatCurrency(totalAccountsReceivable)
+            }}</span>
+          </div>
+          <div class="summary-item">
             <span class="item-label">Total Productos:</span>
             <span class="item-value">{{ totalProducts }}</span>
           </div>
@@ -93,7 +99,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
-import { formatCurrency } from "@/utils/helpers"; // Asegúrate de que esta función esté disponible
+import { formatCurrency } from "@/utils/helpers";
 
 const store = useStore();
 
@@ -109,14 +115,14 @@ const allMovements = computed(() => store.getters["sales/getMovements"]);
 // --- Resumen de Actividad Diaria ---
 const today = computed(() => {
   const now = new Date();
-  now.setHours(0, 0, 0, 0); // Establece la hora a las 00:00:00 para el inicio del día
+  now.setHours(0, 0, 0, 0);
   return now.getTime();
 });
 
 const dailyMovements = computed(() => {
   return allMovements.value.filter((mov) => {
     const movDate = new Date(mov.fecha);
-    movDate.setHours(0, 0, 0, 0); // Normaliza la fecha del movimiento al inicio del día
+    movDate.setHours(0, 0, 0, 0);
     return movDate.getTime() >= today.value;
   });
 });
@@ -134,8 +140,9 @@ const dailyPayments = computed(() => {
 });
 
 const dailyRevenue = computed(() => {
-  // Recaudación real de hoy (pagos a cuenta + pagos de ventas)
-  return dailyMovements.value.reduce((sum, mov) => sum + mov.montoPago, 0);
+  return dailyMovements.value
+    .filter((mov) => mov.type === "pago" || mov.type === "venta") // Podrías tener otros tipos de ingresos, ajústalos según tu lógica de negocio
+    .reduce((sum, mov) => sum + mov.monto, 0);
 });
 
 const newClientsToday = computed(() => {
@@ -160,6 +167,9 @@ const totalProducts = computed(() => allProducts.value.length);
 const totalDebtors = computed(
   () => allClients.value.filter((client) => client.saldoActual > 0).length,
 );
+const totalAccountsReceivable = computed(() => {
+  return allClients.value.reduce((sum, client) => sum + client.saldoActual, 0);
+});
 
 // --- Métodos ---
 const fetchData = async () => {
