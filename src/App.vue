@@ -9,9 +9,7 @@
 import { onMounted } from "vue";
 import { RouterView } from "vue-router"; // Importar RouterView explícitamente
 
-onMounted(async () => {
-  console.log("App.vue mounted. Initializing data if needed.");
-});
+onMounted(async () => {});
 </script>
 
 <style>

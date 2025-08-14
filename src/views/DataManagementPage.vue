@@ -108,6 +108,17 @@ import { useStore } from "vuex";
 // MODIFICADO: Se ha eliminado 'formatDate' ya que no se usa directamente aquí.
 import { exportToExcel, formatCurrency } from "@/utils/helpers";
 
+// NUEVAS IMPORTACIONES: Necesarias para interactuar con Firebase Firestore y tu base de datos local Dexie.
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+} from "firebase/firestore";
+import db from "@/utils/db"; // Dexie local database
+
 const store = useStore();
 
 const exportStartDate = ref("");
@@ -138,15 +149,58 @@ const confirmDeleteHistoricalData = () => {
 const deleteHistoricalData = async () => {
   deletingData.value = true;
   deleteError.value = null;
+
   try {
-    console.log(`Eliminando datos históricos hasta: ${deleteEndDate.value}`);
+    const dbFirestore = getFirestore();
+    const deleteDateTimestamp = new Date(deleteEndDate.value).getTime();
+
+    const movementsCollectionRef = collection(dbFirestore, "movements");
+    const q = query(
+      movementsCollectionRef,
+      where("fecha", "<=", deleteDateTimestamp),
+    );
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      console.log("No se encontraron movimientos para eliminar.");
+      alert(
+        "No se encontraron movimientos para eliminar en ese rango de fechas.",
+      );
+      showDeleteConfirmModal.value = false;
+      return;
+    }
+
+    console.log(
+      `Se encontraron ${querySnapshot.size} movimientos para eliminar.`,
+    );
+
+    const deletePromises = [];
+    querySnapshot.forEach((doc) => {
+      deletePromises.push(deleteDoc(doc.ref));
+    });
+
+    await Promise.all(deletePromises);
+    console.log("Eliminación de documentos en Firebase completada.");
+
+    await db.movements
+      .where("fecha")
+      .belowOrEqual(deleteDateTimestamp)
+      .delete();
+    console.log(
+      "Eliminación de documentos en la base de datos local (IndexedDB) completada.",
+    );
+
     alert(
-      "Funcionalidad de eliminación de datos históricos no implementada completamente en este ejemplo. ¡Añade tu lógica aquí!",
+      `Se han eliminado ${querySnapshot.size} movimientos históricos de Firebase e IndexedDB correctamente.`,
     );
     showDeleteConfirmModal.value = false;
+    deleteEndDate.value = "";
   } catch (error) {
     deleteError.value = error;
     console.error("Error al intentar eliminar datos históricos:", error);
+    alert(
+      `Ocurrió un error al eliminar los datos: ${error.message}. Revisa la consola para más detalles.`,
+    );
   } finally {
     deletingData.value = false;
   }

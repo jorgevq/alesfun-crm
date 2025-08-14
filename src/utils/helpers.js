@@ -131,7 +131,7 @@ export const generateReceiptText = (receiptData) => {
   } else if (type === "P. a/c") {
     transactionTypeHeader = "Pago a Cuenta";
   }
-  receipt += `Tipo: ${transactionTypeHeader}\n`;
+  receipt += `${transactionTypeHeader}\n`;
 
   // Sección de Detalle de Venta (solo para ventas)
   if (type === "Venta" && items.length > 0) {

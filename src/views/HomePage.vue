@@ -180,7 +180,6 @@ const fetchData = async () => {
     await store.dispatch("products/fetchProducts");
     await store.dispatch("sales/fetchMovements");
   } catch (err) {
-    console.error("Error fetching data for HomePage:", err);
     error.value = err;
   } finally {
     loading.value = false;

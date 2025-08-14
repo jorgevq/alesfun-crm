@@ -677,6 +677,9 @@ const clearTransaction = (clearReceipt = false) => {
     lastReceiptText.value = "";
     showLastReceipt.value = false; // Resetear visibilidad al limpiar transacción
   }
+  // --- AÑADIR ESTA LÍNEA ---
+  saleIsFinished.value = false;
+  // -------------------------
   // Asegurarse de re-cargar clientes y productos para reflejar los últimos saldos/stocks
   store.dispatch("clients/fetchClients");
   store.dispatch("products/fetchProducts");
